@@ -4,46 +4,52 @@ import React, { useEffect, useRef, useState } from "react";
 
 const stats = [
   {
-    value: 12400,
-    suffix: "+",
+    value: 0,
+    suffix: "",
     label: "Animals Helped",
     emoji: "🐾",
     color: "#66BB6A",
+    zeroLabel: "Be the first",
   },
   {
-    value: 3800,
-    suffix: "+",
+    value: 1,
+    suffix: "",
     label: "Active Volunteers",
     emoji: "🤝",
     color: "#42A5F5",
+    zeroLabel: "That's you — join now",
   },
   {
-    value: 48,
+    value: 1,
     suffix: "",
     label: "Cities Covered",
     emoji: "📍",
     color: "#FF7043",
+    zeroLabel: "Hyderabad launching",
   },
   {
-    value: 240,
-    suffix: "+",
+    value: 0,
+    suffix: "",
     label: "NGO Partners",
     emoji: "🏥",
     color: "#AB47BC",
+    zeroLabel: "Partner with us",
   },
   {
-    value: 6200,
-    suffix: "+",
+    value: 0,
+    suffix: "",
     label: "Rescue Cases Resolved",
     emoji: "✅",
     color: "#26A69A",
+    zeroLabel: "Every rescue starts somewhere",
   },
   {
-    value: 1850,
-    suffix: "+",
+    value: 0,
+    suffix: "",
     label: "Animals Adopted",
     emoji: "🏡",
     color: "#FFA726",
+    zeroLabel: "Your home could be first",
   },
 ];
 
@@ -67,7 +73,8 @@ function AnimatedNumber({ value, suffix }: { value: number; suffix: string }) {
 
   useEffect(() => {
     if (!started) return;
-    const duration = 2000;
+    if (value === 0) { setDisplay(0); return; }
+    const duration = 1800;
     const start = Date.now();
     const timer = setInterval(() => {
       const elapsed = Date.now() - start;
@@ -126,7 +133,7 @@ export function StatsSection() {
               marginBottom: "12px",
             }}
           >
-            Our Impact So Far
+            Where We Are Now — Day One
           </span>
           <h2
             style={{
@@ -135,10 +142,20 @@ export function StatsSection() {
               fontSize: "clamp(2rem, 4vw, 3rem)",
               color: "#E8F5E9",
               letterSpacing: "-0.02em",
+              marginBottom: "16px",
             }}
           >
-            Every number is a life that matters
+            Every number starts at zero.
           </h2>
+          <p style={{
+            color: "var(--color-text-muted-dark)",
+            fontSize: "1rem",
+            maxWidth: "560px",
+            margin: "0 auto",
+            lineHeight: 1.7,
+          }}>
+            Be the first to make a difference. Each life saved here is a real story — not a placeholder. These numbers are honest because you deserve honest.
+          </p>
         </div>
 
         <div
@@ -148,7 +165,7 @@ export function StatsSection() {
             gap: "24px",
           }}
         >
-          {stats.map((stat, i) => (
+          {stats.map((stat) => (
             <div
               key={stat.label}
               style={{
@@ -205,12 +222,40 @@ export function StatsSection() {
                   fontSize: "0.875rem",
                   color: "var(--color-text-muted-dark)",
                   letterSpacing: "0.02em",
+                  marginBottom: "8px",
                 }}
               >
                 {stat.label}
               </div>
+              {stat.value === 0 || stat.value <= 1 ? (
+                <div
+                  style={{
+                    fontSize: "0.7rem",
+                    color: `${stat.color}bb`,
+                    fontStyle: "italic",
+                    letterSpacing: "0.01em",
+                  }}
+                >
+                  {stat.zeroLabel}
+                </div>
+              ) : null}
             </div>
           ))}
+        </div>
+
+        {/* Honest note */}
+        <div style={{
+          textAlign: "center",
+          marginTop: "48px",
+          padding: "16px 28px",
+          background: "rgba(46,125,50,0.06)",
+          border: "1px solid rgba(46,125,50,0.15)",
+          borderRadius: "var(--radius-xl)",
+          color: "var(--color-text-muted-dark)",
+          fontSize: "0.85rem",
+          lineHeight: 1.6,
+        }}>
+          🌱 <strong style={{ color: "#66BB6A" }}>This is day one.</strong> Numbers here will only ever reflect real animals helped, real rescues done, and real communities formed. No inflated statistics, ever.
         </div>
       </div>
     </section>

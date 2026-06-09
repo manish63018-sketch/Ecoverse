@@ -21,12 +21,7 @@ export function HeroSection() {
       id="hero"
       style={{
         minHeight: "100vh",
-        background: `
-          radial-gradient(ellipse 80% 60% at 50% 30%, rgba(46,125,50,0.25) 0%, transparent 70%),
-          radial-gradient(ellipse 60% 40% at 80% 80%, rgba(27,94,32,0.18) 0%, transparent 60%),
-          radial-gradient(ellipse 50% 30% at 10% 70%, rgba(102,187,106,0.12) 0%, transparent 60%),
-          var(--color-bg-dark)
-        `,
+        backgroundColor: "#0a1a0e",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -36,6 +31,25 @@ export function HeroSection() {
         padding: "120px 24px 80px",
       }}
     >
+      {/* ── Pixel dot grid background (CSS via style tag below) ── */}
+      <div className="hero-pixel-grid" aria-hidden="true" />
+
+      {/* ── Radial depth vignette ── */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `
+            radial-gradient(ellipse 80% 60% at 50% 30%, rgba(46,125,50,0.22) 0%, transparent 70%),
+            radial-gradient(ellipse 60% 40% at 80% 80%, rgba(27,94,32,0.16) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 30% at 10% 70%, rgba(102,187,106,0.10) 0%, transparent 60%),
+            radial-gradient(ellipse 90% 70% at 50% 50%, transparent 40%, #0a1a0e 100%)
+          `,
+          pointerEvents: "none",
+          zIndex: 1,
+        }}
+      />
+
       {/* Floating particles */}
       {floatingParticles.map((p) => (
         <div
@@ -51,23 +65,10 @@ export function HeroSection() {
             opacity: p.opacity,
             animation: `float ${p.duration}s ${p.delay}s ease-in-out infinite`,
             pointerEvents: "none",
+            zIndex: 2,
           }}
         />
       ))}
-
-      {/* Grid overlay */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage: `
-            linear-gradient(rgba(102,187,106,0.04) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(102,187,106,0.04) 1px, transparent 1px)
-          `,
-          backgroundSize: "60px 60px",
-          pointerEvents: "none",
-        }}
-      />
 
       {/* Globe Illustration */}
       <div
@@ -79,12 +80,13 @@ export function HeroSection() {
           height: "500px",
           opacity: 0.12,
           pointerEvents: "none",
+          zIndex: 2,
         }}
       >
         <GlobeSVG />
       </div>
 
-      <div style={{ position: "relative", zIndex: 2, textAlign: "center", maxWidth: "900px" }}>
+      <div style={{ position: "relative", zIndex: 3, textAlign: "center", maxWidth: "900px" }}>
         {/* Launch badge */}
         <div
           style={{
@@ -229,10 +231,29 @@ export function HeroSection() {
           left: 0,
           right: 0,
           height: "120px",
-          background: "linear-gradient(to bottom, transparent, rgba(15,26,16,0.7))",
+          background: "linear-gradient(to bottom, transparent, rgba(10,26,14,0.9))",
           pointerEvents: "none",
+          zIndex: 3,
         }}
       />
+
+      {/* Pixel grid CSS + animations */}
+      <style>{`
+        .hero-pixel-grid {
+          position: absolute;
+          inset: 0;
+          background-image: radial-gradient(circle at 1px 1px, #2E7D32 1.5px, transparent 0);
+          background-size: 22px 22px;
+          opacity: 0.14;
+          animation: pixelShift 10s linear infinite;
+          pointer-events: none;
+          z-index: 0;
+        }
+        @keyframes pixelShift {
+          0%   { background-position: 0 0; }
+          100% { background-position: 22px 22px; }
+        }
+      `}</style>
     </section>
   );
 }

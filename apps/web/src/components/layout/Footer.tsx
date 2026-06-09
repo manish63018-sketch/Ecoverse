@@ -65,9 +65,9 @@ export function Footer() {
             {/* Social links */}
             <div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
               {[
+                { icon: <Instagram size={18} />, href: "https://instagram.com/mannish_2323", label: "Instagram" },
+                { icon: <Github size={18} />, href: "https://github.com/manish63018-sketch", label: "GitHub" },
                 { icon: <Twitter size={18} />, href: "https://twitter.com/ecoversein", label: "Twitter" },
-                { icon: <Instagram size={18} />, href: "https://instagram.com/ecoversein", label: "Instagram" },
-                { icon: <Github size={18} />, href: "https://github.com/ecoverse-in", label: "GitHub" },
               ].map((social) => (
                 <a
                   key={social.label}

@@ -32,14 +32,17 @@ export default function SOSReportPage() {
     }
   }, [user, loading, router]);
 
-  // Handle GPS location auto-detection
+  // Handle GPS location auto-detection — area-level only (~1.1km precision)
   const handleAutoLocate = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setLatitude(position.coords.latitude);
-          setLongitude(position.coords.longitude);
-          toast.success("GPS Location detected!");
+          // Round to 2 decimal places = ~1.1km precision — protects reporter privacy
+          const areaLat = Math.round(position.coords.latitude * 100) / 100;
+          const areaLng = Math.round(position.coords.longitude * 100) / 100;
+          setLatitude(areaLat);
+          setLongitude(areaLng);
+          toast.success("Area location detected! (Exact address is not stored)");
         },
         (error) => {
           console.error("Geolocation error:", error);
@@ -61,6 +64,9 @@ export default function SOSReportPage() {
     try {
       setSubmitting(true);
       const rescueCollection = collection(db, "rescues");
+      // Round coordinates to 2 decimal places (~1.1km area-level) for privacy
+      const areaLat = Math.round(latitude * 100) / 100;
+      const areaLng = Math.round(longitude * 100) / 100;
       const newDocRef = await addDoc(rescueCollection, {
         reporterId: user ? user.uid : "anonymous",
         reporterContact: {
@@ -72,8 +78,8 @@ export default function SOSReportPage() {
         severity,
         status: "reported",
         location: {
-          latitude,
-          longitude,
+          latitude: areaLat,
+          longitude: areaLng,
           addressText: address,
         },
         createdAt: new Date().toISOString(),
@@ -333,8 +339,8 @@ export default function SOSReportPage() {
               </div>
 
               <div style={{ display: "flex", gap: "16px", marginTop: "10px", fontSize: "0.75rem", color: "rgba(232,245,233,0.5)" }}>
-                <span>Lat: {latitude.toFixed(6)}</span>
-                <span>Lng: {longitude.toFixed(6)}</span>
+                <span>Area Lat: {latitude.toFixed(2)} (±~1.1km)</span>
+                <span>Area Lng: {longitude.toFixed(2)} (±~1.1km)</span>
               </div>
             </div>
 
