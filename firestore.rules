@@ -1,0 +1,208 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users (Private PII profiles)
+    // Document ID: userId (matches request.auth.uid)
+    // Fields:
+    //   - uid: string (required) - matches userId
+    //   - displayName: string (required, size 2-100) - public name
+    //   - email: string (required, valid format, size <= 200) - contact email
+    //   - city: string (required, size 2-50) - pilot city selection
+    //   - pincode: string (required, size 6) - postal code
+    //   - roles: list of strings (required, size 1-3) - roles chosen
+    //   - profileSetupComplete: bool (required) - onboarding status
+    //   - joinedAt: string (required) - ISO 8601 creation date
+    //   - lastActive: string (required) - ISO 8601 last active date
+    //   - volunteerInfo: map (optional) - volunteer configuration
+    //   - rescuerInfo: map (optional) - rescuer qualifications
+    //   - adopterInfo: map (optional) - adoption matching attributes
+    //   - veganInfo: map (optional) - vegan pledge tracking
+    //   - ngoInfo: map (optional) - organization info
+    //   - feederInfo: map (optional) - caretaker details
+    //
+    // Collection: public_profiles (PII-free profiles for maps/feed)
+    // Document ID: userId (matches request.auth.uid)
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string (required, size 2-100)
+    //   - city: string (required, size 2-50)
+    //   - roles: list of strings (required, size 1-3)
+    //   - volunteerInfo: map (optional)
+    //   - rescuerInfo: map (optional)
+    //   - ngoInfo: map (optional)
+    //   - feederInfo: map (optional)
+    //
+    // Collection: rescues (SOS emergency alerts)
+    // Document ID: caseId (auto-generated ID)
+    // Fields:
+    //   - caseId: string (required) - document ID reference
+    //   - reporterId: string (required) - creator UID or 'anonymous'
+    //   - reporterContact: map (required) - contains name (string) and phone (string)
+    //   - animalType: string (required, allowed enums)
+    //   - conditionDescription: string (required, size <= 2000)
+    //   - severity: string (required, allowed enums)
+    //   - status: string (required, allowed enums)
+    //   - location: map (required) - contains lat (number), lng (number), addressText (string)
+    //   - createdAt: string (required) - ISO 8601 creation date
+    //   - assignedVolunteerId: string (optional/nullable)
+    //   - assignedNgoId: string (optional/nullable)
+    //
+    // Collection: vegan_pledges (vegan campaign signups)
+    // Document ID: pledgeId (format: userId_pledge)
+    // Fields:
+    //   - pledgeId: string (required)
+    //   - uid: string (required)
+    //   - city: string (required)
+    //   - createdAt: string (required)
+    //
+    // Collection: cities (48 pre-populated pilot cities)
+    // Document ID: cityId (slugified city name)
+    // Fields:
+    //   - cityId: string (required)
+    //   - name: string (required)
+    //   - state: string (required)
+    //   - active: bool (required)
+    //   - stats: map (required) - volunteerCount, ngoCount, rescuesResolved
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(data, ['uid', 'displayName', 'email', 'city', 'pincode', 'roles', 'profileSetupComplete', 'joinedAt', 'lastActive']) &&
+        hasOnlyAllowedFields(data, ['uid', 'displayName', 'email', 'city', 'pincode', 'roles', 'profileSetupComplete', 'joinedAt', 'lastActive', 'volunteerInfo', 'rescuerInfo', 'adopterInfo', 'veganInfo', 'ngoInfo', 'feederInfo']) &&
+        data.uid == request.auth.uid &&
+        data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
+        isValidEmail(data.email) && data.email.size() <= 200 &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 50 &&
+        data.pincode is string && data.pincode.size() == 6 &&
+        data.roles is list && data.roles.size() >= 1 && data.roles.size() <= 3 &&
+        data.profileSetupComplete is bool &&
+        isValidDateString(data.joinedAt) &&
+        isValidDateString(data.lastActive);
+    }
+
+    function isValidPublicProfile(data) {
+      return hasRequiredFields(data, ['uid', 'displayName', 'city', 'roles']) &&
+        hasOnlyAllowedFields(data, ['uid', 'displayName', 'city', 'roles', 'volunteerInfo', 'rescuerInfo', 'ngoInfo', 'feederInfo']) &&
+        data.uid == request.auth.uid &&
+        data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 50 &&
+        data.roles is list && data.roles.size() >= 1 && data.roles.size() <= 3;
+    }
+
+    function isValidRescue(data) {
+      return hasRequiredFields(data, ['reporterId', 'reporterContact', 'animalType', 'conditionDescription', 'severity', 'status', 'location', 'createdAt']) &&
+        hasOnlyAllowedFields(data, ['caseId', 'reporterId', 'reporterContact', 'animalType', 'conditionDescription', 'severity', 'status', 'location', 'createdAt', 'assignedVolunteerId', 'assignedNgoId']) &&
+        data.animalType in ['dog', 'cat', 'cow', 'bird', 'other'] &&
+        data.severity in ['low', 'medium', 'high', 'critical'] &&
+        data.status in ['reported', 'dispatched', 'in_progress', 'resolved', 'escalated'] &&
+        data.conditionDescription is string && data.conditionDescription.size() <= 2000 &&
+        data.reporterContact is map &&
+        data.reporterContact.name is string && data.reporterContact.name.size() <= 100 &&
+        data.reporterContact.phone is string && data.reporterContact.phone.size() <= 20 &&
+        data.location is map &&
+        data.location.latitude is number &&
+        data.location.longitude is number &&
+        data.location.addressText is string && data.location.addressText.size() <= 500 &&
+        isValidDateString(data.createdAt);
+    }
+
+    function isValidVeganPledge(data) {
+      return hasRequiredFields(data, ['pledgeId', 'uid', 'city', 'createdAt']) &&
+        hasOnlyAllowedFields(data, ['pledgeId', 'uid', 'city', 'createdAt']) &&
+        data.pledgeId == data.uid + "_pledge" &&
+        data.uid == request.auth.uid &&
+        data.city is string && data.city.size() <= 50 &&
+        isValidDateString(data.createdAt);
+    }
+
+    // ===============================================================
+    // Rules Match Blocks
+    // ===============================================================
+
+    // 1. Private User Profiles (Contains PII like Email & Pincode)
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && areImmutableFieldsUnchanged(['uid', 'joinedAt']);
+      allow delete: if false; // Profiles are never deleted directly
+    }
+
+    // 2. Public User Profiles (PII-free, safe to display on Maps & Feeds)
+    match /public_profiles/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidPublicProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidPublicProfile(request.resource.data) && areImmutableFieldsUnchanged(['uid']);
+      allow delete: if isOwner(userId);
+    }
+
+    // 3. Emergency Rescue Cases
+    match /rescues/{caseId} {
+      allow read: if isAuthenticated();
+      // Any verified authenticated user can report a case
+      allow create: if isAuthenticated() && isValidRescue(request.resource.data);
+      // Valid state transition required: cannot change reporterId or createdAt
+      allow update: if isAuthenticated() && 
+                    isValidRescue(request.resource.data) && 
+                    areImmutableFieldsUnchanged(['reporterId', 'createdAt']);
+      allow delete: if false; // Rescue records are archival and cannot be deleted
+    }
+
+    // 4. Vegan Pledges (Read publicly, write by own user)
+    match /vegan_pledges/{pledgeId} {
+      allow read: if true; // Publicly readable for the campaign pledge counter
+      allow create: if isAuthenticated() && isValidVeganPledge(request.resource.data);
+      allow update: if false; // Pledges are immutable once created
+      allow delete: if isOwner(request.auth.uid) && pledgeId == request.auth.uid + "_pledge";
+    }
+
+    // 5. Pre-populated Active/Inactive Cities
+    match /cities/{cityId} {
+      allow read: if true; // Map centers are publicly readable
+      allow write: if false; // Lock down database modifications (Admin dashboard updates only)
+    }
+  }
+}
