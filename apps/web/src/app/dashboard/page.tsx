@@ -201,6 +201,20 @@ export default function DashboardPage() {
             >
               Back to Home
             </Link>
+            <Link
+              href="/profile"
+              style={{
+                color: "rgba(232, 245, 233, 0.8)",
+                textDecoration: "none",
+                fontWeight: 600,
+                fontSize: "0.9rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              My Profile
+            </Link>
             <button
               onClick={handleLogout}
               className="btn btn-ghost"
@@ -373,7 +387,7 @@ export default function DashboardPage() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px", fontSize: "0.75rem", color: "rgba(232, 245, 233, 0.5)" }}>
                           <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                             <Clock size={12} />
-                            Reported by {rescue.reporterContact.name} ({rescue.reporterContact.phone})
+                            Reported {rescue.createdAt ? new Date(rescue.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "recently"}
                           </span>
                           
                           {isAssignedToMe ? (

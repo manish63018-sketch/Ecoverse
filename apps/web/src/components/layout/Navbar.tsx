@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Menu, X, Bell, LogOut, LayoutDashboard, User as UserIcon } from "lucide-react";
+import { Menu, X, Bell, LogOut, LayoutDashboard, User as UserIcon, Settings } from "lucide-react";
 import { EcoVerseLogo } from "@/components/brand/Logo";
 import { useAuth } from "@/context/AuthContext";
 import toast from "react-hot-toast";
@@ -112,31 +112,59 @@ export function Navbar() {
               </Link>
             ))}
             {user && (
-              <Link
-                href="/dashboard"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "8px 16px",
-                  borderRadius: "var(--radius-full)",
-                  fontFamily: "var(--font-sans)",
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                  textDecoration: "none",
-                  color: "rgba(232,245,233,0.85)",
-                  transition: "all var(--transition-base)",
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = "rgba(102,187,106,0.12)";
-                  (e.target as HTMLElement).style.color = "#A5D6A7";
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = "transparent";
-                  (e.target as HTMLElement).style.color = "rgba(232,245,233,0.85)";
-                }}
-              >
-                Dashboard
-              </Link>
+              <>
+                <Link
+                  href="/dashboard"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "8px 16px",
+                    borderRadius: "var(--radius-full)",
+                    fontFamily: "var(--font-sans)",
+                    fontWeight: 600,
+                    fontSize: "0.9rem",
+                    textDecoration: "none",
+                    color: "rgba(232,245,233,0.85)",
+                    transition: "all var(--transition-base)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.target as HTMLElement).style.background = "rgba(102,187,106,0.12)";
+                    (e.target as HTMLElement).style.color = "#A5D6A7";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.target as HTMLElement).style.background = "transparent";
+                    (e.target as HTMLElement).style.color = "rgba(232,245,233,0.85)";
+                  }}
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/profile"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "8px 16px",
+                    borderRadius: "var(--radius-full)",
+                    fontFamily: "var(--font-sans)",
+                    fontWeight: 600,
+                    fontSize: "0.9rem",
+                    textDecoration: "none",
+                    color: "rgba(232,245,233,0.85)",
+                    transition: "all var(--transition-base)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(102,187,106,0.12)";
+                    (e.currentTarget as HTMLElement).style.color = "#A5D6A7";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = "transparent";
+                    (e.currentTarget as HTMLElement).style.color = "rgba(232,245,233,0.85)";
+                  }}
+                >
+                  <UserIcon size={14} /> Profile
+                </Link>
+              </>
             )}
           </div>
 
@@ -155,31 +183,36 @@ export function Navbar() {
             {/* Auth State Button */}
             {user ? (
               <div className="hidden-mobile" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName || "User"}
-                    style={{ width: "34px", height: "34px", borderRadius: "50%", border: "2px solid #66BB6A" }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "34px",
-                      height: "34px",
-                      borderRadius: "50%",
-                      background: "rgba(102,187,106,0.2)",
-                      border: "2px solid #66BB6A",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#A5D6A7",
-                      fontWeight: "bold",
-                      fontSize: "0.875rem"
-                    }}
-                  >
-                    {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : "U")}
-                  </div>
-                )}
+                <Link href="/profile" style={{ textDecoration: "none" }}>
+                  {user.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt={user.displayName || "User"}
+                      title="View Profile"
+                      style={{ width: "34px", height: "34px", borderRadius: "50%", border: "2px solid #66BB6A", cursor: "pointer" }}
+                    />
+                  ) : (
+                    <div
+                      title="View Profile"
+                      style={{
+                        width: "34px",
+                        height: "34px",
+                        borderRadius: "50%",
+                        background: "rgba(102,187,106,0.2)",
+                        border: "2px solid #66BB6A",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#A5D6A7",
+                        fontWeight: "bold",
+                        fontSize: "0.875rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {user.displayName ? user.displayName.charAt(0).toUpperCase() : (user.email ? user.email.charAt(0).toUpperCase() : "U")}
+                    </div>
+                  )}
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="btn btn-ghost"
@@ -260,22 +293,40 @@ export function Navbar() {
               </Link>
             ))}
             {user && (
-              <Link
-                href="/dashboard"
-                onClick={() => setMobileOpen(false)}
-                style={{
-                  padding: "14px 20px",
-                  borderRadius: "var(--radius-lg)",
-                  fontWeight: 600,
-                  fontSize: "1rem",
-                  color: "rgba(232,245,233,0.85)",
-                  background: "transparent",
-                  textDecoration: "none",
-                  transition: "all var(--transition-fast)",
-                }}
-              >
-                Dashboard
-              </Link>
+              <>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileOpen(false)}
+                  style={{
+                    padding: "14px 20px",
+                    borderRadius: "var(--radius-lg)",
+                    fontWeight: 600,
+                    fontSize: "1rem",
+                    color: "rgba(232,245,233,0.85)",
+                    background: "transparent",
+                    textDecoration: "none",
+                    transition: "all var(--transition-fast)",
+                  }}
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/profile"
+                  onClick={() => setMobileOpen(false)}
+                  style={{
+                    padding: "14px 20px",
+                    borderRadius: "var(--radius-lg)",
+                    fontWeight: 600,
+                    fontSize: "1rem",
+                    color: "rgba(232,245,233,0.85)",
+                    background: "transparent",
+                    textDecoration: "none",
+                    transition: "all var(--transition-fast)",
+                  }}
+                >
+                  My Profile
+                </Link>
+              </>
             )}
             <div style={{ display: "flex", gap: "12px", marginTop: "12px", padding: "0 4px" }}>
               <Link href="/sos" onClick={() => setMobileOpen(false)} className="btn btn-sos" style={{ flex: 1, fontSize: "0.9rem", textAlign: "center" }}>🚨 Report SOS</Link>
