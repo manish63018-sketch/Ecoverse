@@ -283,6 +283,8 @@ export default function ProfilePage() {
             gap: "20px",
             marginTop: "-50px",
             marginBottom: "32px",
+            position: "relative",
+            zIndex: 5,
           }}
         >
           {/* Avatar */}
