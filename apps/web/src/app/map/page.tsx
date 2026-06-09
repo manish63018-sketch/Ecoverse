@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, MapPin, Activity, Shield, Users, AlertCircle } from "lucide-react";
+import { ArrowLeft, MapPin, Activity, Shield, Users, AlertCircle, Volume2, VolumeX } from "lucide-react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import dynamic from "next/dynamic";
@@ -15,6 +15,70 @@ export default function MapPage() {
   const [ngosCount, setNgosCount] = useState(0);
   const [rescuesCount, setRescuesCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
+  const prevRescuesCountRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const soundEnabledRef = useRef(true);
+
+  // Synchronize soundRef with soundEnabled state
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  // Load sound setting from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("ecoverse_map_sound");
+    if (saved !== null) {
+      setSoundEnabled(saved === "true");
+    }
+  }, []);
+
+  const toggleSound = () => {
+    const newVal = !soundEnabled;
+    setSoundEnabled(newVal);
+    localStorage.setItem("ecoverse_map_sound", String(newVal));
+  };
+
+  const playAlertSound = () => {
+    if (!soundEnabledRef.current) return;
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      
+      const now = ctx.currentTime;
+      
+      const playBeep = (startTime: number) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, startTime); // A5 note
+        osc.frequency.exponentialRampToValueAtTime(440, startTime + 0.15);
+        
+        gainNode.gain.setValueAtTime(0, startTime);
+        gainNode.gain.linearRampToValueAtTime(0.12, startTime + 0.03);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.18);
+        
+        osc.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        osc.start(startTime);
+        osc.stop(startTime + 0.2);
+      };
+      
+      // Double beep for rescue alert
+      playBeep(now);
+      playBeep(now + 0.25);
+    } catch (err) {
+      console.warn("Audio Context sound blocked by browser autoplay policy:", err);
+    }
+  };
 
   useEffect(() => {
     // 1. Count Volunteers
@@ -46,6 +110,16 @@ export default function MapPage() {
       unsubRescues();
     };
   }, []);
+
+  // Alert trigger when rescuesCount changes from 0 -> >0
+  useEffect(() => {
+    if (prevRescuesCountRef.current !== null) {
+      if (prevRescuesCountRef.current === 0 && rescuesCount > 0) {
+        playAlertSound();
+      }
+    }
+    prevRescuesCountRef.current = rescuesCount;
+  }, [rescuesCount]);
 
   return (
     <div
@@ -90,6 +164,28 @@ export default function MapPage() {
                   {isConnected ? "Live" : "Connecting..."}
                 </span>
               </div>
+              
+              {/* Alert Sound Control */}
+              <button
+                onClick={toggleSound}
+                style={{
+                  background: soundEnabled ? "rgba(102, 187, 106, 0.12)" : "rgba(239, 83, 80, 0.12)",
+                  border: `1px solid ${soundEnabled ? "rgba(102, 187, 106, 0.3)" : "rgba(239, 83, 80, 0.3)"}`,
+                  color: soundEnabled ? "#66BB6A" : "#EF5350",
+                  borderRadius: "50%",
+                  width: "28px",
+                  height: "28px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  marginLeft: "4px",
+                  transition: "all 0.2s",
+                }}
+                title={soundEnabled ? "Mute alert sounds" : "Unmute alert sounds"}
+              >
+                {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+              </button>
             </div>
             <p style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", margin: "2px 0 0 0" }}>
               Real-time volunteer distribution and open rescue alerts
@@ -213,6 +309,59 @@ export default function MapPage() {
             💡 <strong>Privacy Protection:</strong> Exact GPS coordinates of emergency cases are masked. Jitter offsets (+/- 300m) are applied publicly.
           </div>
         </div>
+
+        {/* Be the first volunteer CTA */}
+        {volunteersCount === 0 && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "32px",
+              right: "24px",
+              zIndex: 10,
+              background: "rgba(21, 35, 23, 0.9)",
+              backdropFilter: "blur(16px)",
+              border: "1px solid rgba(102, 187, 106, 0.3)",
+              borderRadius: "var(--radius-xl)",
+              padding: "16px 20px",
+              maxWidth: "340px",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 15px rgba(102, 187, 106, 0.15)",
+              animation: "slideUp 0.3s ease",
+            }}
+            className="first-volunteer-cta"
+          >
+            <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+              <div style={{ fontSize: "1.5rem" }}>🌱</div>
+              <div>
+                <h4 style={{ margin: "0 0 4px 0", fontSize: "0.9rem", fontWeight: 700, color: "#66BB6A" }}>
+                  Be the Pioneer!
+                </h4>
+                <p style={{ margin: "0 0 12px 0", fontSize: "0.78rem", color: "rgba(232, 245, 233, 0.75)", lineHeight: 1.45 }}>
+                  There are currently no active rescuers on the map. Join as the first volunteer in your city and make an impact!
+                </p>
+                <Link
+                  href="/signup"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "linear-gradient(135deg, #2E7D32, #66BB6A)",
+                    border: "none",
+                    color: "#FFFFFF",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    padding: "8px 16px",
+                    borderRadius: "var(--radius-full)",
+                    boxShadow: "0 4px 12px rgba(46, 125, 50, 0.3)",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  Join EcoVerse &rarr;
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <style>{`
@@ -249,9 +398,21 @@ export default function MapPage() {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         @media (max-width: 768px) {
           .counters-container { display: none !important; }
           .map-legend-card { width: 220px !important; }
+        }
+        @media (max-width: 576px) {
+          .first-volunteer-cta {
+            left: 16px !important;
+            right: 16px !important;
+            bottom: 16px !important;
+            max-width: none !important;
+          }
         }
       `}</style>
     </div>
