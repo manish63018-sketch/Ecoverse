@@ -15,6 +15,7 @@ interface UserProfile {
   city: string;
   roles: string[];
   profileSetupComplete: boolean;
+  availableNow?: boolean;
 }
 
 interface RescueCase {
@@ -34,6 +35,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [verifying, setVerifying] = useState(true);
+  const [isAvailable, setIsAvailable] = useState(false);
+  const [togglingAvail, setTogglingAvail] = useState(false);
   
   // Realtime rescues states
   const [rescues, setRescues] = useState<RescueCase[]>([]);
@@ -52,7 +55,9 @@ export default function DashboardPage() {
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists() && docSnap.data().profileSetupComplete === true) {
-          setProfile(docSnap.data() as UserProfile);
+          const data = docSnap.data() as UserProfile;
+          setProfile(data);
+          setIsAvailable(data.availableNow ?? false);
         } else {
           // Profile incomplete, redirect to onboarding
           toast("Please complete your onboarding profile first");
@@ -157,6 +162,25 @@ export default function DashboardPage() {
     } catch (error) {
       console.error("Error resolving rescue case:", error);
       toast.error("Failed to resolve rescue case");
+    }
+  };
+
+  const toggleAvailability = async () => {
+    if (!user || !profile) return;
+    setTogglingAvail(true);
+    try {
+      const newVal = !isAvailable;
+      await updateDoc(doc(db, "users", user.uid), { availableNow: newVal });
+      // Also update public profile for map
+      await updateDoc(doc(db, "public_profiles", user.uid), {
+        "volunteerInfo.availableNow": newVal,
+      }).catch(() => {});
+      setIsAvailable(newVal);
+      toast.success(newVal ? "You're now showing as available 🟢" : "Availability set to offline");
+    } catch (err) {
+      toast.error("Failed to update availability");
+    } finally {
+      setTogglingAvail(false);
     }
   };
 
@@ -310,24 +334,77 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Display Roles Selected */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {profile.roles.map((role) => (
-                <span
-                  key={role}
-                  style={{
-                    background: "rgba(102, 187, 106, 0.1)",
-                    border: "1px solid rgba(102, 187, 106, 0.25)",
-                    color: "#A5D6A7",
-                    borderRadius: "var(--radius-full)",
-                    padding: "6px 14px",
-                    fontWeight: 600,
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {role.toUpperCase()}
-                </span>
-              ))}
+            {/* Display Roles & Volunteer Availability Toggle */}
+            <div
+              style={{
+                background: "rgba(21, 35, 23, 0.45)",
+                backdropFilter: "blur(20px)",
+                WebkitBackdropFilter: "blur(20px)",
+                border: "1px solid rgba(102, 187, 106, 0.15)",
+                borderRadius: "var(--radius-2xl)",
+                padding: "24px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+                justifyContent: "center",
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(232, 245, 233, 0.6)", margin: "0 0 10px 0" }}>My Roles</h3>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {profile.roles.map((role) => (
+                    <span
+                      key={role}
+                      style={{
+                        background: "rgba(102, 187, 106, 0.1)",
+                        border: "1px solid rgba(102, 187, 106, 0.25)",
+                        color: "#A5D6A7",
+                        borderRadius: "var(--radius-full)",
+                        padding: "4px 12px",
+                        fontWeight: 600,
+                        fontSize: "0.72rem",
+                      }}
+                    >
+                      {role.toUpperCase()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {profile.roles.includes("volunteer") && (
+                <div style={{ borderTop: "1px solid rgba(102, 187, 106, 0.15)", paddingTop: "14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                    <div>
+                      <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#FFFFFF" }}>Volunteer Status</div>
+                      <div style={{ fontSize: "0.7rem", color: "rgba(232, 245, 233, 0.45)", marginTop: "2px" }}>
+                        {isAvailable ? "🟢 Available on live map" : "🔴 Offline / Hidden"}
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={toggleAvailability}
+                      disabled={togglingAvail}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: isAvailable ? "rgba(102,187,106,0.15)" : "rgba(255,255,255,0.06)",
+                        border: `1px solid ${isAvailable ? "rgba(102,187,106,0.4)" : "rgba(255,255,255,0.1)"}`,
+                        color: isAvailable ? "#66BB6A" : "rgba(232,245,233,0.4)",
+                        borderRadius: "var(--radius-full)",
+                        padding: "6px 14px",
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                        fontFamily: "var(--font-sans)",
+                      }}
+                    >
+                      {isAvailable ? "Go Offline" : "Go Online"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -381,13 +458,33 @@ export default function DashboardPage() {
                             {rescue.severity.toUpperCase()}
                           </span>
                         </div>
-                        <p style={{ color: "rgba(232, 245, 233, 0.6)", fontSize: "0.85rem" }}>
-                          Location: {rescue.location.addressText}
-                        </p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                          <p style={{ color: "rgba(232, 245, 233, 0.6)", fontSize: "0.85rem", margin: 0 }}>
+                            Location: {rescue.location.addressText}
+                          </p>
+                          {/* Contact detail if assigned to current user */}
+                          {isAssignedToMe && rescue.reporterContact && (
+                            <div style={{
+                              marginTop: "8px",
+                              padding: "10px 14px",
+                              background: "rgba(102, 187, 106, 0.08)",
+                              border: "1px solid rgba(102, 187, 106, 0.2)",
+                              borderRadius: "var(--radius-lg)",
+                              fontSize: "0.8rem",
+                            }}>
+                              <div style={{ fontWeight: 600, color: "#A5D6A7", marginBottom: "4px" }}>📞 Reporter Contact Details:</div>
+                              <div>Name: {rescue.reporterContact.name || "Anonymous"}</div>
+                              <div>Phone: <a href={`tel:${rescue.reporterContact.phone}`} style={{ color: "#66BB6A", fontWeight: 700, textDecoration: "none" }}>{rescue.reporterContact.phone}</a></div>
+                            </div>
+                          )}
+                        </div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px", fontSize: "0.75rem", color: "rgba(232, 245, 233, 0.5)" }}>
-                          <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
                             <Clock size={12} />
                             Reported {rescue.createdAt ? new Date(rescue.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "recently"}
+                            <span style={{ color: "rgba(232, 245, 233, 0.45)", marginLeft: "6px" }}>
+                              by {rescue.reporterContact?.name ? rescue.reporterContact.name.split(" ")[0] : "Anonymous"}
+                            </span>
                           </span>
                           
                           {isAssignedToMe ? (
