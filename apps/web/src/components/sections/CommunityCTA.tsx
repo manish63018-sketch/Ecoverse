@@ -1,12 +1,48 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
+import { collection, query, where, getCountFromServer } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export function CommunityCTA() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [counts, setCounts] = useState<Record<string, number | null>>({
+    rescuer: null,
+    vegan: null,
+    adopter: null,
+    ngo: null,
+    feeder: null,
+    volunteer: null,
+  });
+
+  useEffect(() => {
+    async function loadCounts() {
+      try {
+        const [rescuerSnap, veganSnap, adopterSnap, ngoSnap, feederSnap, volunteerSnap] = await Promise.all([
+          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "rescuer"))),
+          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "vegan"))),
+          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "adopter"))),
+          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo"))),
+          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "feeder"))),
+          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"))),
+        ]);
+        setCounts({
+          rescuer: rescuerSnap.data().count,
+          vegan: veganSnap.data().count,
+          adopter: adopterSnap.data().count,
+          ngo: ngoSnap.data().count,
+          feeder: feederSnap.data().count,
+          volunteer: volunteerSnap.data().count,
+        });
+      } catch (err) {
+        console.error("Error loading community CTA counts:", err);
+      }
+    }
+    loadCounts();
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -14,12 +50,12 @@ export function CommunityCTA() {
   };
 
   const roles = [
-    { emoji: "🐾", label: "Animal Rescuer", count: "1,240" },
-    { emoji: "🌱", label: "Vegan / Activist", count: "3,800" },
-    { emoji: "🏡", label: "Foster Parent", count: "560" },
-    { emoji: "🏥", label: "NGO / Org", count: "240" },
-    { emoji: "💊", label: "Vet / Doctor", count: "180" },
-    { emoji: "🤝", label: "Volunteer", count: "2,100" },
+    { emoji: "🐾", label: "Animal Rescuer", count: counts.rescuer !== null ? String(counts.rescuer) : "..." },
+    { emoji: "🌱", label: "Vegan Advocate", count: counts.vegan !== null ? String(counts.vegan) : "..." },
+    { emoji: "🏡", label: "Foster / Adopter", count: counts.adopter !== null ? String(counts.adopter) : "..." },
+    { emoji: "🏥", label: "NGO / Org", count: counts.ngo !== null ? String(counts.ngo) : "..." },
+    { emoji: "🥣", label: "Street Feeder", count: counts.feeder !== null ? String(counts.feeder) : "..." },
+    { emoji: "🤝", label: "Volunteer", count: counts.volunteer !== null ? String(counts.volunteer) : "..." },
   ];
 
   return (

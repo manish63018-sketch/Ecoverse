@@ -1,8 +1,29 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { collection, query, where, getCountFromServer } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export function MapPreview() {
+  const [volunteersCount, setVolunteersCount] = useState<number | null>(null);
+  const [ngosCount, setNgosCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const [volunteersSnap, ngosSnap] = await Promise.all([
+          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"))),
+          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo")))
+        ]);
+        setVolunteersCount(volunteersSnap.data().count);
+        setNgosCount(ngosSnap.data().count);
+      } catch (err) {
+        console.error("Error fetching map preview stats:", err);
+      }
+    }
+    loadStats();
+  }, []);
+
   const cities = [
     { name: "Hyderabad", lat: "61%", lng: "52%", volunteers: 340, rescues: 28, color: "#E53935" },
     { name: "Mumbai", lat: "48%", lng: "28%", volunteers: 620, rescues: 45, color: "#E53935" },
@@ -105,9 +126,9 @@ export function MapPreview() {
             {/* Stats */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
               {[
-                { value: "48", label: "Cities", icon: "📍" },
-                { value: "3,800+", label: "Active Volunteers", icon: "🤝" },
-                { value: "240+", label: "NGO Partners", icon: "🏥" },
+                { value: "1", label: "Pilot Cities", icon: "📍" },
+                { value: volunteersCount !== null ? String(volunteersCount) : "...", label: "Active Volunteers", icon: "🤝" },
+                { value: ngosCount !== null ? String(ngosCount) : "...", label: "NGO Partners", icon: "🏥" },
                 { value: "Real-time", label: "Live Updates", icon: "⚡" },
               ].map((s) => (
                 <div
