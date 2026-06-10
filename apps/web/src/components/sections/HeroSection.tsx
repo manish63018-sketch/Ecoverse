@@ -90,10 +90,11 @@ export function HeroSection() {
 
       {/* ── Layer 4: Hero content — left-aligned, floats over globe ── */}
       <div
+        className="hero-content"
         style={{
           position:  "relative",
           zIndex:    3,
-          maxWidth:  "680px",
+          maxWidth:  "760px",
           padding:   "140px 56px 100px",
         }}
       >
@@ -276,7 +277,7 @@ export function HeroSection() {
           to   { opacity: 1; transform: translateY(0); }
         }
         @media (max-width: 768px) {
-          #hero > div:last-of-type {
+          .hero-content {
             padding: 90px 16px 50px !important;
             max-width: 100% !important;
             width: 100% !important;

@@ -196,6 +196,7 @@ export function CommunityCTA() {
         {!submitted ? (
           <form
             onSubmit={handleSubmit}
+            className="cta-email-form"
             style={{
               display: "flex",
               gap: "12px",
@@ -257,7 +258,7 @@ export function CommunityCTA() {
         <p style={{ color: "var(--color-text-muted-dark)", fontSize: "0.875rem", marginBottom: "24px" }}>
           or
         </p>
-        <div style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap" }}>
+        <div className="cta-buttons" style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap" }}>
           <Link href="/signup" className="btn btn-accent" style={{ fontSize: "1rem", padding: "15px 36px" }}>
             🚀 Join Now — It&apos;s Free
           </Link>

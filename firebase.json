@@ -1,7 +1,6 @@
 {
   "firestore": {
     "database": "(default)",
-    "location": "nam5",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
@@ -13,5 +12,16 @@
         "supportEmail": "manish63018@gmail.com"
       }
     }
+  },
+  "hosting": {
+    "site": "ecoverseindia",
+    "public": "apps/web/out",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "cleanUrls": true,
+    "trailingSlash": true
   }
 }

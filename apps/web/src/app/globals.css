@@ -389,8 +389,22 @@ p { line-height: 1.7; }
   border-radius: var(--radius-sm);
 }
 
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.show-mobile {
+  display: none !important;
+}
+
 /* ─── Responsive Helpers ─── */
 @media (max-width: 768px) {
+  .show-mobile {
+    display: flex !important;
+  }
+
   .section, section, #hero, #impact, #how-it-works, #features, #map-preview, #testimonials, #community-cta {
     padding: 40px 16px !important;
   }
@@ -431,8 +445,8 @@ p { line-height: 1.7; }
 
   /* ── Stats Cards Grid (2 columns on mobile) ── */
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 12px !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
   }
   .stats-card {
     padding: 16px 12px !important;
@@ -501,6 +515,40 @@ p { line-height: 1.7; }
   }
   #map-preview [style*="height: \"480px\""] {
     height: 280px !important;
+  }
+}
+
+/* ─── Mobile-Specific Layout Overrides ─── */
+@media (max-width: 500px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .cta-email-form {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    gap: 12px !important;
+  }
+  .cta-email-form input {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .cta-email-form button {
+    width: 100% !important;
+  }
+
+  .cta-buttons {
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 12px !important;
+  }
+  .cta-buttons a, .cta-buttons button {
+    width: 100% !important;
+    justify-content: center !important;
   }
 }
 

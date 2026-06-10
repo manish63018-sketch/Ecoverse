@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { recordVolunteerResponse } from '@/lib/alertEngine';
 import { query } from '@/lib/db';
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-static';
+export function generateStaticParams() { return []; }
 
 export async function POST(
   req: NextRequest,

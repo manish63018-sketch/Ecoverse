@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import { getStates } from '@/lib/location';
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-static';
 
 export async function GET() {
   try {

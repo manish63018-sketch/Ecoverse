@@ -234,14 +234,7 @@ export function StatsSection() {
           </p>
         </div>
 
-        <div
-          className="stats-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: "24px",
-          }}
-        >
+        <div className="stats-grid">
           {STAT_CONFIG.map((cfg) => {
             const value = stats[cfg.key];
             return (

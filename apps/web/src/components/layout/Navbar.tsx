@@ -244,7 +244,6 @@ export function Navbar() {
                 borderRadius: "var(--radius-md)",
                 padding: "8px",
                 cursor: "pointer",
-                display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 transition: "all var(--transition-fast)",
@@ -349,7 +348,7 @@ export function Navbar() {
 
       <style>{`
         .hidden-mobile { display: flex; }
-        .show-mobile { display: none; }
+        .show-mobile { display: none !important; }
         @media (max-width: 768px) {
           .hidden-mobile { display: none !important; }
           .show-mobile { display: flex !important; }

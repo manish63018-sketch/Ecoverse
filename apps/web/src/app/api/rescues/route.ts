@@ -8,7 +8,7 @@ import { validateLocationHierarchy, buildDisplayZone, getUserLocationProfile } f
 import { alertVolunteersForCase } from '@/lib/alertEngine';
 import type { CreateRescueBody, RescueCase } from '@/types/rescue';
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-static';
 
 // ── POST /api/rescues ────────────────────────────────────────────
 export async function POST(req: NextRequest) {

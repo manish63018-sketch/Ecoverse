@@ -174,8 +174,8 @@ export default function EarthGlobe() {
 
     // ── Globe params ──
     const isMobile = W < 768;
-    const R      = isMobile ? Math.min(W, H) * 0.30 : Math.min(W, H) * 0.60;
-    const cx     = isMobile ? W * 0.5 : W * 0.68;
+    const R      = isMobile ? Math.min(W, H) * 0.30 : Math.min(W, H) * 0.52;
+    const cx     = isMobile ? W * 0.5 : W * 0.74;
     const cy     = isMobile ? H * 0.77 : H * 0.48;
     const fov    = 2.8;                       // perspective strength
 
