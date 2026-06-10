@@ -99,6 +99,7 @@ export function HeroSection() {
       >
         {/* Launch badge */}
         <div
+          className="hero-badge"
           style={{
             display:       "inline-flex",
             alignItems:    "center",
@@ -183,6 +184,7 @@ export function HeroSection() {
 
         {/* CTA buttons */}
         <div
+          className="hero-actions"
           style={{
             display:   "flex",
             gap:       "14px",
@@ -217,6 +219,7 @@ export function HeroSection() {
 
         {/* Trust indicators */}
         <div
+          className="hero-tags"
           style={{
             display:    "flex",
             gap:        "28px",
@@ -250,6 +253,7 @@ export function HeroSection() {
 
         {/* Drag hint */}
         <p
+          className="hero-drag-hint"
           style={{
             marginTop:     "36px",
             fontSize:      "0.7rem",
@@ -272,6 +276,36 @@ export function HeroSection() {
         @media (max-width: 768px) {
           #hero > div:last-of-type {
             padding: 120px 24px 80px !important;
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+          .hero-actions {
+            flex-direction: column !important;
+            width: 100% !important;
+            gap: 12px !important;
+          }
+          .hero-actions .btn {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .hero-drag-hint {
+            display: none !important;
+          }
+          .hero-badge {
+            padding: 6px 14px !important;
+            margin-bottom: 20px !important;
+          }
+          .hero-badge span:last-of-type {
+            font-size: 0.7rem !important;
+            letter-spacing: 0.02em !important;
+          }
+          .hero-tags {
+            gap: 16px 20px !important;
+            margin-top: 30px !important;
+            justify-content: flex-start !important;
+          }
+          .hero-tags > div {
+            flex: 0 0 calc(50% - 10px) !important;
           }
         }
       `}</style>
