@@ -1,10 +1,41 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Zap, Shield, Users, Clock } from "lucide-react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
-const features = [
+// Haversine distance calculator
+function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// Relative time formatter
+function getRelativeTime(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+const getFeatures = (stats: any, loading: boolean) => [
   {
     id: "sos",
     badge: "🚨 Live Now",
@@ -20,7 +51,7 @@ const features = [
     ],
     cta: { label: "Report Emergency", href: "/sos" },
     ctaStyle: "btn-sos",
-    visual: <SOSVisual />,
+    visual: <SOSVisual stats={stats} loading={loading} />,
     gradient: "linear-gradient(135deg, rgba(229,57,53,0.12) 0%, rgba(183,28,28,0.05) 100%)",
     border: "rgba(229,57,53,0.2)",
   },
@@ -39,7 +70,7 @@ const features = [
     ],
     cta: { label: "See Live Rescues", href: "/rescue" },
     ctaStyle: "btn-primary",
-    visual: <RescueVisual />,
+    visual: <RescueVisual stats={stats} loading={loading} />,
     gradient: "linear-gradient(135deg, rgba(102,187,106,0.1) 0%, rgba(46,125,50,0.04) 100%)",
     border: "rgba(102,187,106,0.2)",
   },
@@ -58,7 +89,7 @@ const features = [
     ],
     cta: { label: "Explore Map", href: "/map" },
     ctaStyle: "btn-ghost",
-    visual: <MapVisual />,
+    visual: <MapVisual stats={stats} loading={loading} />,
     gradient: "linear-gradient(135deg, rgba(66,165,245,0.1) 0%, rgba(2,119,189,0.04) 100%)",
     border: "rgba(66,165,245,0.2)",
   },
@@ -73,7 +104,107 @@ function MapPinIcon({ size }: { size: number }) {
   );
 }
 
-function SOSVisual() {
+function SOSCard({ card, position }: { card: any; position: any }) {
+  const [displayName, setDisplayName] = useState(card.name);
+
+  useEffect(() => {
+    if (card.type === "volunteer" && card.id) {
+      const fetchProfile = async () => {
+        try {
+          const docRef = doc(db, "users", card.id);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.displayName) {
+              setDisplayName(data.displayName);
+            }
+          }
+        } catch (err) {
+          console.warn("Could not load name from Firestore, using default:", err);
+        }
+      };
+      fetchProfile();
+    }
+  }, [card]);
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        ...position,
+        background: "rgba(15,26,16,0.9)",
+        border: "1px solid rgba(229,57,53,0.3)",
+        borderRadius: "var(--radius-lg)",
+        padding: "10px 14px",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        minWidth: "150px",
+        backdropFilter: "blur(12px)",
+        zIndex: 3,
+      }}
+    >
+      <span style={{ fontSize: "1.25rem" }}>{card.emoji}</span>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: "0.8rem", color: "#E8F5E9" }}>{displayName}</div>
+        <div style={{ fontSize: "0.7rem", color: "#E53935" }}>
+          {card.type === "area" ? card.dist : `📍 ${card.dist} away`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SOSVisual({ stats, loading }: { stats: any; loading: boolean }) {
+  if (loading) {
+    return (
+      <div style={{ width: "100%", height: "280px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="spinner" style={{ borderColor: "#E53935" }} />
+      </div>
+    );
+  }
+
+  const members = stats?.members || [];
+  const sampleAreas = stats?.sampleAreas || [];
+
+  let displayCards: any[] = [];
+  if (members.length > 0) {
+    displayCards = members.slice(0, 3).map((m: any, idx: number) => {
+      let distanceStr = `${((idx + 1) * 0.7).toFixed(1)}km`;
+      if (m.lat && m.lng) {
+        // default center is Hyderabad
+        const centerLat = 17.385;
+        const centerLng = 78.4867;
+        const dist = getDistance(centerLat, centerLng, m.lat, m.lng);
+        distanceStr = dist < 0.1 ? "Nearby" : `${dist.toFixed(1)}km`;
+      }
+      const emojiDisplay = m.type === "ngo" ? "🏥" : idx % 2 === 0 ? "👩‍⚕️" : "🧑‍🌾";
+      return {
+        id: m.id,
+        name: m.type === "ngo" ? m.name : "Verified Volunteer",
+        type: m.type,
+        emoji: emojiDisplay,
+        dist: distanceStr,
+      };
+    });
+  } else {
+    // Fallback to seeded active areas
+    const fallbackAreas = sampleAreas.length > 0 ? sampleAreas : ["Banjara Hills", "Jubilee Hills", "Secunderabad"];
+    displayCards = fallbackAreas.slice(0, 3).map((area: string, idx: number) => ({
+      id: `area-${idx}`,
+      name: area,
+      type: "area",
+      emoji: "📍",
+      dist: "Covered Zone",
+    }));
+  }
+
+  const positions = [
+    { top: "10%", right: "5%" },
+    { bottom: "15%", right: "0%" },
+    { top: "40%", left: "0%" },
+  ];
+
   return (
     <div
       style={{
@@ -121,79 +252,135 @@ function SOSVisual() {
       </div>
 
       {/* Notification cards */}
-      {[
-        { emoji: "🐕", name: "Raju M.", dist: "0.8km", top: "10%", right: "5%" },
-        { emoji: "🏥", name: "PAWS NGO", dist: "1.2km", bottom: "15%", right: "0%" },
-        { emoji: "👩‍⚕️", name: "Priya K.", dist: "2.1km", top: "40%", left: "0%" },
-      ].map((card) => (
-        <div
-          key={card.name}
-          style={{
-            position: "absolute",
-            top: card.top,
-            bottom: card.bottom,
-            left: card.left,
-            right: card.right,
-            background: "rgba(15,26,16,0.9)",
-            border: "1px solid rgba(229,57,53,0.3)",
-            borderRadius: "var(--radius-lg)",
-            padding: "10px 14px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            minWidth: "140px",
-            backdropFilter: "blur(12px)",
-          }}
-        >
-          <span style={{ fontSize: "1.25rem" }}>{card.emoji}</span>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: "0.8rem", color: "#E8F5E9" }}>{card.name}</div>
-            <div style={{ fontSize: "0.7rem", color: "#E53935" }}>📍 {card.dist} away</div>
-          </div>
-        </div>
+      {displayCards.map((card, idx) => (
+        <SOSCard key={card.id} card={card} position={positions[idx % positions.length]} />
       ))}
     </div>
   );
 }
 
-function RescueVisual() {
-  const cases = [
-    { status: "🟢 Resolved", animal: "Dog - Leg injury", time: "2 hrs ago", vol: "Amit S." },
-    { status: "🟡 In Progress", animal: "Cat - Trapped", time: "Active now", vol: "Priya K." },
-    { status: "🔴 Open", animal: "Cow - Hit by vehicle", time: "Just now", vol: "Assigning..." },
-  ];
+function RescueVisual({ stats, loading }: { stats: any; loading: boolean }) {
+  if (loading) {
+    return (
+      <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            style={{
+              background: "rgba(15,26,16,0.5)",
+              border: "1px solid rgba(102,187,106,0.1)",
+              borderRadius: "var(--radius-lg)",
+              padding: "16px",
+              height: "76px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "60%" }}>
+              <div style={{ height: "14px", background: "rgba(232, 245, 233, 0.1)", borderRadius: "4px" }} />
+              <div style={{ height: "10px", background: "rgba(232, 245, 233, 0.05)", borderRadius: "4px", width: "40%" }} />
+            </div>
+            <div style={{ height: "12px", background: "rgba(102, 187, 106, 0.2)", borderRadius: "4px", width: "60px" }} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const cases = stats?.recentCases || [];
+
+  if (cases.length === 0) {
+    return (
+      <div
+        style={{
+          padding: "24px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          textAlign: "center",
+          background: "rgba(15,26,16,0.6)",
+          border: "1px dashed rgba(102,187,106,0.3)",
+          borderRadius: "var(--radius-xl)",
+          minHeight: "180px",
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <span style={{ fontSize: "2rem", marginBottom: "12px" }}>🐾</span>
+        <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#E8F5E9", marginBottom: "4px" }}>
+          All Quiet In Your Area
+        </div>
+        <p style={{ fontSize: "0.8rem", color: "var(--color-text-muted-dark)", maxWidth: "260px", lineHeight: 1.5 }}>
+          0 active animal emergencies. Network is online and volunteers are standing by.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-      {cases.map((c, i) => (
-        <div
-          key={i}
-          style={{
-            background: "rgba(15,26,16,0.8)",
-            border: "1px solid rgba(102,187,106,0.2)",
-            borderRadius: "var(--radius-lg)",
-            padding: "16px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            backdropFilter: "blur(12px)",
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 700, fontSize: "0.875rem", color: "#E8F5E9", marginBottom: "4px" }}>
-              {c.animal}
+      {cases.slice(0, 3).map((c: any) => {
+        let statusText = "⚪ Standby";
+        let statusColor = "var(--color-text-muted-dark)";
+        switch (c.status) {
+          case "resolved":
+            statusText = "🟢 Resolved";
+            statusColor = "#66BB6A";
+            break;
+          case "in_progress":
+          case "assigned":
+            statusText = "🟡 In Progress";
+            statusColor = "#FFA726";
+            break;
+          case "escalated":
+            statusText = "🟠 Escalated";
+            statusColor = "#FF7043";
+            break;
+          case "open":
+            statusText = "🔴 Open";
+            statusColor = "#E53935";
+            break;
+        }
+
+        const animalTitle = `${
+          c.animal_type ? c.animal_type.charAt(0).toUpperCase() + c.animal_type.slice(1) : "Animal"
+        } - ${c.condition_summary || "Urgent Case"}`;
+        const relativeTime = getRelativeTime(c.created_at);
+
+        return (
+          <div
+            key={c.id}
+            style={{
+              background: "rgba(15,26,16,0.8)",
+              border: "1px solid rgba(102,187,106,0.2)",
+              borderRadius: "var(--radius-lg)",
+              padding: "16px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "0.875rem", color: "#E8F5E9", marginBottom: "4px" }}>
+                {animalTitle}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted-dark)" }}>
+                📍 {c.area_name || "Hyderabad"} · {relativeTime}
+              </div>
             </div>
-            <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted-dark)" }}>
-              🧑 {c.vol} · {c.time}
-            </div>
+            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: statusColor }}>{statusText}</span>
           </div>
-          <span style={{ fontSize: "0.75rem", fontWeight: 700 }}>{c.status}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function MapVisual() {
+function MapVisual({ stats, loading }: { stats: any; loading: boolean }) {
+  const counts = stats?.counts || { states: 1, cities: 1, areas: 39 };
+
   return (
     <div
       style={{
@@ -208,7 +395,6 @@ function MapVisual() {
         justifyContent: "center",
       }}
     >
-      {/* Simplified India map outline */}
       <svg viewBox="0 0 300 350" style={{ width: "200px", opacity: 0.6 }}>
         <path
           d="M150 20 L220 60 L250 120 L240 180 L210 240 L180 300 L150 330 L120 300 L90 240 L60 180 L50 120 L80 60 Z"
@@ -218,12 +404,11 @@ function MapVisual() {
         />
       </svg>
 
-      {/* Map pins */}
       {[
-        { top: "30%", left: "52%", color: "#E53935", label: "🚨 SOS" },
-        { top: "45%", left: "45%", color: "#66BB6A", label: "🤝 Volunteer" },
-        { top: "60%", left: "55%", color: "#42A5F5", label: "🏥 NGO" },
-        { top: "50%", left: "38%", color: "#FFA726", label: "🏡 Adopt" },
+        { top: "30%", left: "52%", color: "#E53935", label: `🚨 ${counts.rescues || 0} active cases` },
+        { top: "45%", left: "45%", color: "#66BB6A", label: `🤝 ${counts.volunteers || 0} volunteers` },
+        { top: "60%", left: "55%", color: "#42A5F5", label: `🏥 ${counts.ngos || 0} NGOs` },
+        { top: "50%", left: "38%", color: "#FFA726", label: `📍 ${counts.areas || 39} zones` },
       ].map((pin) => (
         <div
           key={pin.label}
@@ -252,6 +437,26 @@ function MapVisual() {
 }
 
 export function FeatureSpotlight() {
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLandingStats = async () => {
+      try {
+        const res = await fetch("/api/landing-stats");
+        const data = await res.json();
+        setStats(data);
+      } catch (err) {
+        console.error("Failed to fetch landing stats:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLandingStats();
+  }, []);
+
+  const features = getFeatures(stats, loading);
+
   return (
     <section
       id="features"
@@ -295,7 +500,7 @@ export function FeatureSpotlight() {
               key={feature.id}
               style={{
                 display: "grid",
-                gridTemplateColumns: i % 2 === 0 ? "1fr 1fr" : "1fr 1fr",
+                gridTemplateColumns: "1fr 1fr",
                 gap: "40px",
                 background: feature.gradient,
                 border: `1px solid ${feature.border}`,
@@ -381,9 +586,7 @@ export function FeatureSpotlight() {
               </div>
 
               {/* Visual */}
-              <div style={{ order: i % 2 === 0 ? 2 : 1 }}>
-                {feature.visual}
-              </div>
+              <div style={{ order: i % 2 === 0 ? 2 : 1 }}>{feature.visual}</div>
             </div>
           ))}
         </div>
