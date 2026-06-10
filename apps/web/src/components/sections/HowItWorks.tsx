@@ -87,6 +87,7 @@ export function HowItWorks() {
 
         {/* Steps */}
         <div
+          className="steps-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
@@ -110,6 +111,7 @@ export function HowItWorks() {
           {steps.map((step, i) => (
             <div
               key={step.step}
+              className="step-card"
               style={{
                 position: "relative",
                 zIndex: 1,

@@ -391,10 +391,116 @@ p { line-height: 1.7; }
 
 /* ─── Responsive Helpers ─── */
 @media (max-width: 768px) {
-  .section { padding: var(--space-12) var(--space-4); }
-  .container { padding: 0 var(--space-4); }
+  .section, section, #hero, #impact, #how-it-works, #features, #map-preview, #testimonials, #community-cta {
+    padding: 40px 16px !important;
+  }
+  .container {
+    padding: 0 var(--space-4);
+  }
   .earth-globe-canvas {
     pointer-events: none !important;
+  }
+
+  /* ── Typography Downscaling ── */
+  h1 {
+    font-size: 1.8rem !important;
+    line-height: 1.1 !important;
+    margin-bottom: 12px !important;
+  }
+  h2, #impact h2, #how-it-works h2, #features h2, #map-preview h2, #testimonials h2, #community-cta h2 {
+    font-size: 1.35rem !important;
+    line-height: 1.25 !important;
+    margin-bottom: 12px !important;
+  }
+  h3, #how-it-works h3, #features h3, #testimonials h3 {
+    font-size: 1.05rem !important;
+    margin-bottom: 8px !important;
+  }
+  p, #impact p, #how-it-works p, #features p, #map-preview p, #testimonials p, #community-cta p {
+    font-size: 0.8rem !important;
+    line-height: 1.5 !important;
+    margin-bottom: 16px !important;
+  }
+
+  /* ── Compact Buttons ── */
+  .btn, .btn-primary, .btn-accent, .btn-ghost, .btn-sos {
+    padding: 8px 16px !important;
+    font-size: 0.8rem !important;
+    height: auto !important;
+  }
+
+  /* ── Stats Cards Grid (2 columns on mobile) ── */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  .stats-card {
+    padding: 16px 12px !important;
+    border-radius: var(--radius-lg) !important;
+  }
+  .stats-value {
+    font-size: 1.35rem !important;
+    margin-bottom: 4px !important;
+  }
+  .stats-card div:first-of-type {
+    font-size: 1.6rem !important;
+    margin-bottom: 8px !important;
+  }
+
+  /* ── How It Works Cards ── */
+  .steps-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  .step-card {
+    padding: 16px 14px !important;
+    border-radius: var(--radius-lg) !important;
+  }
+  .step-card [style*="width: 60px"], .step-card [style*="width: \"60px\""] {
+    width: 38px !important;
+    height: 38px !important;
+    margin-bottom: 10px !important;
+  }
+  .step-card svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  /* ── Features Spotlight Specifics ── */
+  #features > div > div:last-of-type {
+    gap: 16px !important;
+  }
+  .feature-grid {
+    padding: 16px 14px !important;
+    border-radius: var(--radius-xl) !important;
+    gap: 16px !important;
+  }
+  .feature-grid ul {
+    margin-bottom: 16px !important;
+    gap: 4px !important;
+  }
+  .feature-grid ul li {
+    font-size: 0.75rem !important;
+  }
+  #features [style*="height: \"280px\""] {
+    height: 160px !important;
+  }
+  #features [style*="width: \"80px\""] {
+    width: 44px !important;
+    height: 44px !important;
+    font-size: 1.1rem !important;
+  }
+  #features [style*="width: \"150px\""] {
+    min-width: 110px !important;
+    padding: 4px 8px !important;
+  }
+
+  /* ── Map Preview ── */
+  #map-preview .map-layout {
+    gap: 24px !important;
+  }
+  #map-preview [style*="height: \"480px\""] {
+    height: 280px !important;
   }
 }
 

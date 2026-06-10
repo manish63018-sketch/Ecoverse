@@ -235,6 +235,7 @@ export function StatsSection() {
         </div>
 
         <div
+          className="stats-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
@@ -246,6 +247,7 @@ export function StatsSection() {
             return (
               <div
                 key={cfg.key}
+                className="stats-card"
                 style={{
                   background: "rgba(26, 46, 27, 0.65)",
                   backdropFilter: "blur(12px)",
@@ -282,6 +284,7 @@ export function StatsSection() {
                 />
                 <div style={{ fontSize: "2.5rem", marginBottom: "16px" }}>{cfg.emoji}</div>
                 <div
+                  className="stats-value"
                   style={{
                     fontFamily: "var(--font-sans)",
                     fontWeight: 800,

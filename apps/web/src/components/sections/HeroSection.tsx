@@ -129,12 +129,13 @@ export function HeroSection() {
         </div>
 
         {/* Logo */}
-        <div style={{ marginBottom: "28px", animation: "fade-up 0.6s 0.15s ease both" }}>
+        <div className="hero-logo" style={{ marginBottom: "28px", animation: "fade-up 0.6s 0.15s ease both" }}>
           <EcoVerseLogo theme="dark" size={56} />
         </div>
 
         {/* Headline */}
         <h1
+          className="hero-title"
           style={{
             fontFamily:    "var(--font-sans)",
             fontWeight:    900,
@@ -167,6 +168,7 @@ export function HeroSection() {
 
         {/* Subtitle */}
         <p
+          className="hero-desc"
           style={{
             fontFamily:    "var(--font-sans)",
             color:         "rgba(165,200,167,0.80)",
@@ -275,25 +277,41 @@ export function HeroSection() {
         }
         @media (max-width: 768px) {
           #hero > div:last-of-type {
-            padding: 120px 24px 80px !important;
+            padding: 90px 16px 50px !important;
             max-width: 100% !important;
             width: 100% !important;
+          }
+          .hero-logo svg {
+            width: 44px !important;
+            height: 44px !important;
+          }
+          .hero-title {
+            font-size: 2.1rem !important;
+            line-height: 1.05 !important;
+            margin-bottom: 14px !important;
+          }
+          .hero-desc {
+            font-size: 0.875rem !important;
+            line-height: 1.6 !important;
+            margin-bottom: 28px !important;
           }
           .hero-actions {
             flex-direction: column !important;
             width: 100% !important;
-            gap: 12px !important;
+            gap: 10px !important;
           }
           .hero-actions .btn {
             width: 100% !important;
             justify-content: center !important;
+            padding: 11px 20px !important;
+            font-size: 0.9rem !important;
           }
           .hero-drag-hint {
             display: none !important;
           }
           .hero-badge {
             padding: 6px 14px !important;
-            margin-bottom: 20px !important;
+            margin-bottom: 18px !important;
           }
           .hero-badge span:last-of-type {
             font-size: 0.7rem !important;
@@ -301,7 +319,7 @@ export function HeroSection() {
           }
           .hero-tags {
             gap: 16px 20px !important;
-            margin-top: 30px !important;
+            margin-top: 26px !important;
             justify-content: flex-start !important;
           }
           .hero-tags > div {
