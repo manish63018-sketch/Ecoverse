@@ -393,4 +393,8 @@ p { line-height: 1.7; }
 @media (max-width: 768px) {
   .section { padding: var(--space-12) var(--space-4); }
   .container { padding: 0 var(--space-4); }
+  .earth-globe-canvas {
+    pointer-events: none !important;
+  }
 }
+

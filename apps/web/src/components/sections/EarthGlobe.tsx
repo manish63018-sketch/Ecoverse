@@ -173,9 +173,10 @@ export default function EarthGlobe() {
     ctx.clearRect(0, 0, W, H);
 
     // ── Globe params ──
-    const R      = Math.min(W, H) * 0.60;   // radius – large but not fully cropped
-    const cx     = W * 0.68;                 // shifted right, globe visible
-    const cy     = H * 0.48;
+    const isMobile = W < 768;
+    const R      = isMobile ? Math.min(W, H) * 0.40 : Math.min(W, H) * 0.60;
+    const cx     = isMobile ? W * 0.5 : W * 0.68;
+    const cy     = isMobile ? H * 0.75 : H * 0.48;
     const fov    = 2.8;                       // perspective strength
 
     // ── Auto-rotate ──
@@ -246,63 +247,71 @@ export default function EarthGlobe() {
     projected.sort((a, b) => a.depth - b.depth);
 
     // ── Draw grid lines (latitude / longitude) ──
-    ctx.save();
-    ctx.globalAlpha = 0.06;
-    ctx.strokeStyle = '#66BB6A';
-    ctx.lineWidth   = 0.5;
+    if (!isMobile) {
+      ctx.save();
+      ctx.globalAlpha = 0.06;
+      ctx.strokeStyle = '#66BB6A';
+      ctx.lineWidth   = 0.5;
 
-    // Draw 6 latitude circles
-    for (let latDeg = -60; latDeg <= 60; latDeg += 30) {
-      const latRad = latDeg * Math.PI / 180;
-      const ry     = Math.sin(latRad);
-      const rr     = Math.cos(latRad);
-      ctx.beginPath();
-      for (let lon = 0; lon <= 360; lon += 2) {
-        const lonRad = lon * Math.PI / 180;
-        const dx  = rr * Math.cos(lonRad);
-        const dz  = rr * Math.sin(lonRad);
-        // rotate
-        const rx1 =  dx * cosY + dz * sinY;
-        const rz1 = -dx * sinY + dz * cosY;
-        const ry2 =  ry * cosX - rz1 * sinX;
-        const rz2 =  ry * sinX + rz1 * cosX;
-        if (rz2 < -0.05) continue;
-        const sc  = fov / (fov + 1 - ((rz2 + 1) / 2) * 0.6);
-        const px  = cx + rx1 * R * sc;
-        const py  = cy - ry2 * R * sc;
-        if (lon === 0) ctx.moveTo(px, py);
-        else           ctx.lineTo(px, py);
+      // Draw 6 latitude circles
+      for (let latDeg = -60; latDeg <= 60; latDeg += 30) {
+        const latRad = latDeg * Math.PI / 180;
+        const ry     = Math.sin(latRad);
+        const rr     = Math.cos(latRad);
+        ctx.beginPath();
+        for (let lon = 0; lon <= 360; lon += 2) {
+          const lonRad = lon * Math.PI / 180;
+          const dx  = rr * Math.cos(lonRad);
+          const dz  = rr * Math.sin(lonRad);
+          // rotate
+          const rx1 =  dx * cosY + dz * sinY;
+          const rz1 = -dx * sinY + dz * cosY;
+          const ry2 =  ry * cosX - rz1 * sinX;
+          const rz2 =  ry * sinX + rz1 * cosX;
+          if (rz2 < -0.05) continue;
+          const sc  = fov / (fov + 1 - ((rz2 + 1) / 2) * 0.6);
+          const px  = cx + rx1 * R * sc;
+          const py  = cy - ry2 * R * sc;
+          if (lon === 0) ctx.moveTo(px, py);
+          else           ctx.lineTo(px, py);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
-    }
 
-    // Draw 6 longitude arcs
-    for (let lonDeg = 0; lonDeg < 180; lonDeg += 30) {
-      const lonRad = lonDeg * Math.PI / 180;
-      ctx.beginPath();
-      for (let lat = -90; lat <= 90; lat += 2) {
-        const latRad = lat * Math.PI / 180;
-        const dx  = Math.cos(latRad) * Math.cos(lonRad);
-        const dz  = Math.cos(latRad) * Math.sin(lonRad);
-        const dy  = Math.sin(latRad);
-        const rx1 =  dx * cosY + dz * sinY;
-        const rz1 = -dx * sinY + dz * cosY;
-        const ry2 =  dy * cosX - rz1 * sinX;
-        const rz2 =  dy * sinX + rz1 * cosX;
-        if (rz2 < -0.05) continue;
-        const sc  = fov / (fov + 1 - ((rz2 + 1) / 2) * 0.6);
-        const px  = cx + rx1 * R * sc;
-        const py  = cy - ry2 * R * sc;
-        if (lat === -90) ctx.moveTo(px, py);
-        else             ctx.lineTo(px, py);
+      // Draw 6 longitude arcs
+      for (let lonDeg = 0; lonDeg < 180; lonDeg += 30) {
+        const lonRad = lonDeg * Math.PI / 180;
+        ctx.beginPath();
+        for (let lat = -90; lat <= 90; lat += 2) {
+          const latRad = lat * Math.PI / 180;
+          const dx  = Math.cos(latRad) * Math.cos(lonRad);
+          const dz  = Math.cos(latRad) * Math.sin(lonRad);
+          const dy  = Math.sin(latRad);
+          const rx1 =  dx * cosY + dz * sinY;
+          const rz1 = -dx * sinY + dz * cosY;
+          const ry2 =  dy * cosX - rz1 * sinX;
+          const rz2 =  dy * sinX + rz1 * cosX;
+          if (rz2 < -0.05) continue;
+          const sc  = fov / (fov + 1 - ((rz2 + 1) / 2) * 0.6);
+          const px  = cx + rx1 * R * sc;
+          const py  = cy - ry2 * R * sc;
+          if (lat === -90) ctx.moveTo(px, py);
+          else             ctx.lineTo(px, py);
+        }
+        ctx.stroke();
       }
-      ctx.stroke();
+      ctx.restore();
     }
-    ctx.restore();
 
     // ── Draw dots ──
+    let skipCount = 0;
     for (const p of projected) {
       if (!p.visible) continue;
+
+      if (isMobile) {
+        skipCount++;
+        if (skipCount % 2 === 0) continue;
+      }
 
       const { depth, dot } = p;
       // Depth-based fade: back hemisphere is darker
@@ -426,6 +435,7 @@ export default function EarthGlobe() {
     <canvas
       ref={canvasRef}
       aria-label="Rotating Earth globe"
+      className="earth-globe-canvas"
       style={{
         display:   'block',
         width:     '100%',
