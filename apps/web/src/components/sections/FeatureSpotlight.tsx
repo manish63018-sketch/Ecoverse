@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Zap, Shield, Users, Clock } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 
 // Haversine distance calculator
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -437,13 +438,30 @@ function MapVisual({ stats, loading }: { stats: any; loading: boolean }) {
 }
 
 export function FeatureSpotlight() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchLandingStats = async () => {
       try {
-        const res = await fetch("/api/landing-stats");
+        let url = "/api/landing-stats";
+        if (user) {
+          try {
+            const locRes = await fetch(`/api/users/location?firebase_uid=${user.uid}`);
+            if (locRes.ok) {
+              const locData = await locRes.json();
+              if (locData.profile?.city_id) {
+                url += `?city_id=${locData.profile.city_id}`;
+              } else if (locData.profile?.state_id) {
+                url += `?state_id=${locData.profile.state_id}`;
+              }
+            }
+          } catch (locErr) {
+            console.warn("Failed to fetch user location profile for spotlight:", locErr);
+          }
+        }
+        const res = await fetch(url);
         const data = await res.json();
         setStats(data);
       } catch (err) {
@@ -453,7 +471,7 @@ export function FeatureSpotlight() {
       }
     };
     fetchLandingStats();
-  }, []);
+  }, [user]);
 
   const features = getFeatures(stats, loading);
 

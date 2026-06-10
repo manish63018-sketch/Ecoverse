@@ -41,6 +41,32 @@ export async function GET(req: NextRequest) {
       isDbConnected = false;
     }
 
+    const { searchParams } = req.nextUrl;
+    const cityId = searchParams.get('city_id');
+    const stateId = searchParams.get('state_id');
+
+    let whereClauseRecent = '1=1';
+    let whereClauseVol = 'available_now = true OR verification_status = \'verified\'';
+    let whereClauseNgo = '1=1';
+    let whereClauseArea = '1=1';
+    const queryParams: any[] = [];
+
+    if (cityId) {
+      queryParams.push(cityId);
+      const paramIndex = queryParams.length;
+      whereClauseRecent += ` AND rc.city_id = $${paramIndex}`;
+      whereClauseVol = `(available_now = true OR verification_status = 'verified') AND city_id = $${paramIndex}`;
+      whereClauseNgo += ` AND city_id = $${paramIndex}`;
+      whereClauseArea += ` AND city_id = $${paramIndex}`;
+    } else if (stateId) {
+      queryParams.push(stateId);
+      const paramIndex = queryParams.length;
+      whereClauseRecent += ` AND rc.state_id = $${paramIndex}`;
+      whereClauseVol = `(available_now = true OR verification_status = 'verified') AND state_id = $${paramIndex}`;
+      whereClauseNgo += ` AND state_id = $${paramIndex}`;
+      whereClauseArea += ` AND state_id = $${paramIndex}`;
+    }
+
     // 2. Recent Cases
     let recentCases: any[] = [];
     if (isDbConnected) {
@@ -52,9 +78,10 @@ export async function GET(req: NextRequest) {
             c.name AS city_name
           FROM rescue_cases rc
           LEFT JOIN cities c ON rc.city_id = c.id
+          WHERE ${whereClauseRecent}
           ORDER BY rc.created_at DESC
           LIMIT 5
-        `);
+        `, queryParams);
       } catch (dbErr) {
         console.warn('[API/landing-stats] Failed to fetch recent cases:', dbErr);
       }
@@ -71,16 +98,17 @@ export async function GET(req: NextRequest) {
             firebase_uid as id, 'volunteer' as type, volunteer_lat as lat, volunteer_lng as lng, 
             verification_status, city_id
           FROM user_locations 
-          WHERE available_now = true OR verification_status = 'verified'
+          WHERE ${whereClauseVol}
           LIMIT 10
-        `);
+        `, queryParams);
 
         const activeNgos = await query(`
           SELECT 
             id, 'ngo' as type, name, lat, lng, city_id
           FROM ngos
+          WHERE ${whereClauseNgo}
           LIMIT 10
-        `);
+        `, queryParams);
 
         members = [
           ...activeVolunteers.map(v => ({
@@ -107,8 +135,10 @@ export async function GET(req: NextRequest) {
 
       try {
         sampleAreas = await query(`
-          SELECT name FROM areas LIMIT 5
-        `);
+          SELECT name FROM areas 
+          WHERE ${whereClauseArea}
+          LIMIT 5
+        `, queryParams);
       } catch (dbErr) {
         console.warn('[API/landing-stats] Failed to fetch sample areas:', dbErr);
       }
