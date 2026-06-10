@@ -96,7 +96,7 @@ function buildGlobeDots(count: number): GlobeDot[] {
   // Extra land-mass dots (denser continent fill)
   for (const seed of CONTINENT_SEEDS) {
     const [sx, sy, sz] = lonLatToXYZ(seed.lon, seed.lat);
-    const extras = Math.floor(seed.density * 80);
+    const extras = Math.floor(seed.density * 30);
     for (let k = 0; k < extras; k++) {
       // Random spread around seed, projected onto sphere
       const spreadRad = seed.r * (Math.PI / 180) * (0.3 + Math.random() * 0.7);
@@ -150,7 +150,7 @@ export default function EarthGlobe() {
 
   // Build dots once on mount
   useEffect(() => {
-    stateRef.current.dots = buildGlobeDots(2800);
+    stateRef.current.dots = buildGlobeDots(1200);
   }, []);
 
   // ─── Main draw loop ─────────────────────────────────────────────────────────
@@ -318,21 +318,12 @@ export default function EarthGlobe() {
         g = Math.floor(130 + depthFade * 85  * sparkle);
         b = Math.floor(65  + depthFade * 50  * sparkle);
         alpha = 0.25 + depthFade * 0.75;
-
-        // Hot-spot glow for front-facing land dots
-        if (depth > 0.72) {
-          ctx.shadowColor = '#a5d6a7';
-          ctx.shadowBlur  = 4 * depth;
-        } else {
-          ctx.shadowBlur  = 0;
-        }
       } else {
         // Ocean — very subtle blue-green dots
         r = Math.floor(15 + depthFade * 35);
         g = Math.floor(50 + depthFade * 70);
         b = Math.floor(45 + depthFade * 60);
         alpha = 0.08 + depthFade * 0.22;
-        ctx.shadowBlur = 0;
       }
 
       ctx.beginPath();
@@ -343,7 +334,6 @@ export default function EarthGlobe() {
     }
 
     // ── Specular highlight (white sheen top-left) ──
-    ctx.shadowBlur = 0;
     const specGrad = ctx.createRadialGradient(
       cx - R * 0.38, cy - R * 0.38, 0,
       cx - R * 0.38, cy - R * 0.38, R * 0.55,
