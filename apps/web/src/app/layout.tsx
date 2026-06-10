@@ -49,6 +49,8 @@ export const metadata: Metadata = {
   },
 };
 
+import PixelSphere from "@/components/PixelSphere";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -65,9 +67,12 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body>
+      <body style={{ background: "#050f07", margin: 0 }}>
         <AuthProvider>
-          {children}
+          <PixelSphere />
+          <div style={{ position: "relative", zIndex: 1 }}>
+            {children}
+          </div>
           <Toaster
             position="top-right"
             toastOptions={{
