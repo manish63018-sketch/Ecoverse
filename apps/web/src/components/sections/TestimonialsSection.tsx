@@ -43,7 +43,7 @@ export function TestimonialsSection() {
     <section
       id="testimonials"
       style={{
-        background: "var(--color-bg-dark)",
+        background: "rgba(15, 26, 16, 0.80)",
         padding: "100px 24px",
       }}
     >
@@ -87,7 +87,9 @@ export function TestimonialsSection() {
             <div
               key={t.name}
               style={{
-                background: "var(--color-surface-dark)",
+                background: "rgba(26, 46, 27, 0.65)",
+                backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
                 border: "1px solid var(--color-border-dark)",
                 borderRadius: "var(--radius-xl)",
                 padding: "32px",

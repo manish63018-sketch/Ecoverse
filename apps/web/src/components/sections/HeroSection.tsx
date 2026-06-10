@@ -4,86 +4,122 @@ import React from "react";
 import Link from "next/link";
 import { EcoVerseLogo } from "@/components/brand/Logo";
 import { ArrowRight, AlertCircle } from "lucide-react";
-import PixelBackground from "@/components/sections/PixelBackground";
+import dynamic from "next/dynamic";
+
+// Lazy-load the heavy canvas globe
+const EarthGlobe = dynamic(() => import("@/components/sections/EarthGlobe"), {
+  ssr: false,
+});
 
 export function HeroSection() {
   return (
     <section
       id="hero"
       style={{
-        minHeight:       "100vh",
-        backgroundColor: "#0a1a0e",
-        display:         "flex",
-        flexDirection:   "column",
-        alignItems:      "center",
-        justifyContent:  "center",
         position:        "relative",
+        width:           "100vw",
+        minHeight:       "100vh",
         overflow:        "hidden",
-        padding:         "120px 24px 80px",
+        display:         "flex",
+        alignItems:      "center",
+        justifyContent:  "flex-start",
+        backgroundColor: "transparent",
       }}
     >
-      {/* ── Layer 0: Canvas pixel animation ── */}
-      <PixelBackground />
-
-      {/* ── Layer 1: Radial depth vignette + green glows ── */}
+      {/* ── Layer 0: Full-screen Earth globe — fills the ENTIRE background ── */}
       <div
         aria-hidden="true"
         style={{
-          position:      "absolute",
-          inset:         0,
+          position: "absolute",
+          inset:    0,
+          zIndex:   0,
+        }}
+      >
+        <EarthGlobe />
+      </div>
+
+      {/* ── Layer 1: Left-side overlay so text is readable against the globe ── */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset:    0,
           background: `
-            radial-gradient(ellipse 80% 60% at 50% 30%, rgba(46,125,50,0.18) 0%, transparent 70%),
-            radial-gradient(ellipse 60% 40% at 80% 80%, rgba(27,94,32,0.12) 0%, transparent 60%),
-            radial-gradient(ellipse 50% 30% at 10% 70%, rgba(102,187,106,0.08) 0%, transparent 60%),
-            radial-gradient(ellipse 90% 70% at 50% 50%, transparent 40%, #0a1a0e 100%)
+            linear-gradient(
+              105deg,
+              rgba(5,15,7,0.92) 0%,
+              rgba(5,15,7,0.75) 35%,
+              rgba(5,15,7,0.15) 58%,
+              transparent 70%
+            )
           `,
           pointerEvents: "none",
           zIndex:        1,
         }}
       />
 
-      {/* ── Layer 2: Globe illustration (decorative) ── */}
+      {/* ── Layer 2: Bottom fade into next section ── */}
       <div
         aria-hidden="true"
         style={{
           position:      "absolute",
-          right:         "-5%",
-          top:           "10%",
-          width:         "500px",
-          height:        "500px",
-          opacity:       0.10,
+          bottom:        0,
+          left:          0,
+          right:         0,
+          height:        "180px",
+          background:    "linear-gradient(to bottom, transparent, rgba(5,15,7,0.98))",
           pointerEvents: "none",
           zIndex:        2,
         }}
+      />
+
+      {/* ── Layer 3: Top fade so navbar is visible ── */}
+      <div
+        aria-hidden="true"
+        style={{
+          position:      "absolute",
+          top:           0,
+          left:          0,
+          right:         0,
+          height:        "110px",
+          background:    "linear-gradient(to bottom, rgba(5,15,7,0.75), transparent)",
+          pointerEvents: "none",
+          zIndex:        2,
+        }}
+      />
+
+      {/* ── Layer 4: Hero content — left-aligned, floats over globe ── */}
+      <div
+        style={{
+          position:  "relative",
+          zIndex:    3,
+          maxWidth:  "680px",
+          padding:   "140px 56px 100px",
+        }}
       >
-        <GlobeSVG />
-      </div>
-
-      {/* ── Layer 3: Hero content ── */}
-      <div style={{ position: "relative", zIndex: 3, textAlign: "center", maxWidth: "900px" }}>
-
         {/* Launch badge */}
         <div
           style={{
-            display:      "inline-flex",
-            alignItems:   "center",
-            gap:          "8px",
-            background:   "rgba(102,187,106,0.1)",
-            border:       "1px solid rgba(102,187,106,0.3)",
-            borderRadius: "var(--radius-full)",
-            padding:      "8px 20px",
-            marginBottom: "32px",
-            animation:    "fade-up 0.5s ease forwards",
+            display:       "inline-flex",
+            alignItems:    "center",
+            gap:           "8px",
+            background:    "rgba(102,187,106,0.1)",
+            border:        "1px solid rgba(102,187,106,0.3)",
+            borderRadius:  "999px",
+            padding:       "8px 20px",
+            marginBottom:  "28px",
+            animation:     "fade-up 0.5s 0.05s ease both",
+            backdropFilter:"blur(8px)",
           }}
         >
-          <span style={{ fontSize: "1rem" }}>🌿</span>
+          <span style={{ fontSize: "0.9rem" }}>🌿</span>
           <span
             style={{
               fontFamily:    "var(--font-sans)",
               fontWeight:    600,
-              fontSize:      "0.8125rem",
+              fontSize:      "0.8rem",
               color:         "var(--color-accent)",
-              letterSpacing: "0.04em",
+              letterSpacing: "0.05em",
               textTransform: "uppercase",
             }}
           >
@@ -92,173 +128,153 @@ export function HeroSection() {
         </div>
 
         {/* Logo */}
-        <div
-          style={{
-            display:       "flex",
-            justifyContent:"center",
-            marginBottom:  "32px",
-            animation:     "fade-up 0.5s 0.1s ease both",
-          }}
-        >
-          <EcoVerseLogo theme="dark" size={64} />
+        <div style={{ marginBottom: "28px", animation: "fade-up 0.6s 0.15s ease both" }}>
+          <EcoVerseLogo theme="dark" size={56} />
         </div>
 
         {/* Headline */}
         <h1
           style={{
             fontFamily:    "var(--font-sans)",
-            fontWeight:    800,
-            fontSize:      "clamp(2.8rem, 6vw, 5.5rem)",
-            lineHeight:    1.05,
-            letterSpacing: "-0.03em",
+            fontWeight:    900,
+            fontSize:      "clamp(3rem, 5.5vw, 6rem)",
+            lineHeight:    0.98,
+            letterSpacing: "-0.04em",
             color:         "#E8F5E9",
-            marginBottom:  "16px",
-            animation:     "fade-up 0.6s 0.2s ease both",
+            marginBottom:  "22px",
+            animation:     "fade-up 0.7s 0.2s ease both",
+            textShadow:    "0 2px 40px rgba(0,0,0,0.8)",
           }}
         >
           One Earth.
           <br />
           <span
             style={{
-              background:            "linear-gradient(135deg, #A5D6A7 0%, #66BB6A 40%, #2E7D32 100%)",
-              WebkitBackgroundClip:  "text",
-              WebkitTextFillColor:   "transparent",
-              backgroundClip:        "text",
+              background:           "linear-gradient(120deg, #A5D6A7 0%, #66BB6A 50%, #2E7D32 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor:  "transparent",
+              backgroundClip:       "text",
             }}
           >
             One Community.
           </span>
           <br />
-          Infinite Compassion.
+          <span style={{ fontSize: "0.62em", fontWeight: 700, color: "rgba(232,245,233,0.7)" }}>
+            Infinite Compassion.
+          </span>
         </h1>
 
         {/* Subtitle */}
         <p
           style={{
-            color:        "var(--color-text-muted-dark)",
-            fontSize:     "clamp(1.05rem, 2.2vw, 1.3rem)",
-            lineHeight:   1.7,
-            maxWidth:     "650px",
-            margin:       "0 auto 48px",
-            animation:    "fade-up 0.6s 0.35s ease both",
+            fontFamily:    "var(--font-sans)",
+            color:         "rgba(165,200,167,0.80)",
+            fontSize:      "clamp(1rem, 1.8vw, 1.2rem)",
+            lineHeight:    1.7,
+            maxWidth:      "520px",
+            marginBottom:  "44px",
+            animation:     "fade-up 0.7s 0.35s ease both",
           }}
         >
-          India&apos;s first unified platform for animal welfare — connecting rescuers,
-          volunteers, NGOs, and animal lovers to rescue faster, adopt better, and
-          protect together.
+          India&apos;s first unified platform for animal welfare — connecting
+          rescuers, volunteers, NGOs and animal lovers to rescue faster, adopt
+          better, and protect together.
         </p>
 
-        {/* CTA Buttons */}
+        {/* CTA buttons */}
         <div
           style={{
-            display:        "flex",
-            gap:            "16px",
-            justifyContent: "center",
-            flexWrap:       "wrap",
-            marginBottom:   "56px",
-            animation:      "fade-up 0.6s 0.5s ease both",
+            display:   "flex",
+            gap:       "14px",
+            flexWrap:  "wrap",
+            animation: "fade-up 0.7s 0.5s ease both",
           }}
         >
-          <Link href="/signup" className="btn btn-primary" style={{ fontSize: "1.05rem", padding: "16px 36px" }}>
+          <Link
+            href="/signup"
+            className="btn btn-primary"
+            style={{ fontSize: "1rem", padding: "15px 32px" }}
+          >
             Join EcoVerse Free
-            <ArrowRight size={20} />
+            <ArrowRight size={18} />
           </Link>
-          <Link href="/sos" className="btn btn-sos" style={{ fontSize: "1.05rem", padding: "16px 32px" }}>
-            <AlertCircle size={20} />
+          <Link
+            href="/sos"
+            className="btn btn-sos"
+            style={{ fontSize: "1rem", padding: "15px 28px" }}
+          >
+            <AlertCircle size={18} />
             Report Emergency SOS
           </Link>
-          <Link href="/map" className="btn btn-ghost" style={{ fontSize: "1.05rem", padding: "16px 32px" }}>
-            🗺️ Explore Live Map
+          <Link
+            href="/map"
+            className="btn btn-ghost"
+            style={{ fontSize: "1rem", padding: "15px 26px" }}
+          >
+            🗺️ Live Map
           </Link>
         </div>
 
         {/* Trust indicators */}
         <div
           style={{
-            display:        "flex",
-            alignItems:     "center",
-            justifyContent: "center",
-            gap:            "32px",
-            flexWrap:       "wrap",
-            animation:      "fade-up 0.6s 0.65s ease both",
+            display:    "flex",
+            gap:        "28px",
+            flexWrap:   "wrap",
+            marginTop:  "40px",
+            animation:  "fade-up 0.7s 0.68s ease both",
           }}
         >
           {[
             { emoji: "🐕", text: "Animal Rescuers" },
             { emoji: "🌱", text: "Vegan Community" },
             { emoji: "🏥", text: "NGO Network" },
-            { emoji: "🤝", text: "Volunteers Ready" },
+            { emoji: "🤝", text: "Volunteers" },
           ].map((item) => (
             <div
               key={item.text}
               style={{
                 display:    "flex",
                 alignItems: "center",
-                gap:        "8px",
-                color:      "var(--color-text-muted-dark)",
-                fontSize:   "0.875rem",
+                gap:        "6px",
+                color:      "rgba(165,200,167,0.65)",
+                fontSize:   "0.82rem",
                 fontWeight: 600,
               }}
             >
-              <span style={{ fontSize: "1.2rem" }}>{item.emoji}</span>
+              <span style={{ fontSize: "1rem" }}>{item.emoji}</span>
               <span>{item.text}</span>
             </div>
           ))}
         </div>
+
+        {/* Drag hint */}
+        <p
+          style={{
+            marginTop:     "36px",
+            fontSize:      "0.7rem",
+            color:         "rgba(102,187,106,0.4)",
+            letterSpacing: "0.1em",
+            fontWeight:    600,
+            animation:     "fade-up 0.7s 1.0s ease both",
+          }}
+        >
+          ↻ DRAG THE EARTH TO ROTATE
+        </p>
       </div>
 
-      {/* ── Bottom fade-to-dark ── */}
-      <div
-        aria-hidden="true"
-        style={{
-          position:      "absolute",
-          bottom:        0,
-          left:          0,
-          right:         0,
-          height:        "140px",
-          background:    "linear-gradient(to bottom, transparent, #0a1a0e)",
-          pointerEvents: "none",
-          zIndex:        4,
-        }}
-      />
-
-      {/* ── CSS fallback + keyframes ── */}
+      {/* ── Keyframes ── */}
       <style>{`
-        /* Fallback if canvas is not supported */
-        .hero-pixel-fallback {
-          position: absolute;
-          inset: 0;
-          background-color: #0a1a0e;
-          background-image: radial-gradient(circle, #2E7D32 1.5px, transparent 0);
-          background-size: 28px 28px;
-          animation: pixelDrift 12s linear infinite;
-          z-index: 0;
+        @keyframes fade-up {
+          from { opacity: 0; transform: translateY(22px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes pixelDrift {
-          0%   { background-position: 0 0; }
-          100% { background-position: 28px 28px; }
+        @media (max-width: 768px) {
+          #hero > div:last-of-type {
+            padding: 120px 24px 80px !important;
+          }
         }
       `}</style>
     </section>
-  );
-}
-
-// ─── Globe SVG (unchanged) ────────────────────────────────────────────────────
-
-function GlobeSVG() {
-  return (
-    <svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="200" cy="200" r="190" stroke="#66BB6A" strokeWidth="1.5" />
-      <ellipse cx="200" cy="200" rx="90"  ry="190" stroke="#66BB6A" strokeWidth="1" />
-      <ellipse cx="200" cy="200" rx="190" ry="60"  stroke="#66BB6A" strokeWidth="1" />
-      <ellipse cx="200" cy="200" rx="190" ry="110" stroke="#66BB6A" strokeWidth="0.7" opacity="0.6" />
-      <line x1="10"  y1="200" x2="390" y2="200" stroke="#66BB6A" strokeWidth="1" />
-      <line x1="200" y1="10"  x2="200" y2="390" stroke="#66BB6A" strokeWidth="1" />
-      {/* Simplified continents */}
-      <ellipse cx="160" cy="160" rx="45" ry="30" fill="#2E7D32" opacity="0.4" transform="rotate(-15 160 160)" />
-      <ellipse cx="250" cy="140" rx="30" ry="20" fill="#2E7D32" opacity="0.35" transform="rotate(10 250 140)" />
-      <ellipse cx="220" cy="240" rx="40" ry="25" fill="#2E7D32" opacity="0.38" transform="rotate(-5 220 240)" />
-      <ellipse cx="140" cy="250" rx="25" ry="18" fill="#2E7D32" opacity="0.3" transform="rotate(15 140 250)" />
-    </svg>
   );
 }

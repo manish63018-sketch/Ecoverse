@@ -63,8 +63,8 @@ export function CommunityCTA() {
       id="join"
       style={{
         background: `
-          radial-gradient(ellipse 70% 60% at 50% 100%, rgba(46,125,50,0.3) 0%, transparent 60%),
-          var(--color-bg-dark)
+          radial-gradient(ellipse 70% 60% at 50% 100%, rgba(46,125,50,0.35) 0%, transparent 60%),
+          rgba(15, 26, 16, 0.80)
         `,
         borderTop: "1px solid var(--color-border-dark)",
         padding: "120px 24px",

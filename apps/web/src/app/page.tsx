@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   return (
-    <main style={{ background: "var(--color-bg-dark)", minHeight: "100vh" }}>
+    <main style={{ background: "transparent", minHeight: "100vh" }}>
       <Navbar />
       <HeroSection />
       <MissionStrip />

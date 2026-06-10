@@ -39,7 +39,7 @@ export function MapPreview() {
     <section
       id="map-preview"
       style={{
-        background: "var(--color-bg-dark-alt)",
+        background: "rgba(21, 35, 23, 0.82)",
         borderTop: "1px solid var(--color-border-dark)",
         padding: "100px 24px",
       }}

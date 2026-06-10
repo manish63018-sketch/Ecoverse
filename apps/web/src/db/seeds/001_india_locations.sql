@@ -282,3 +282,242 @@ CROSS JOIN (VALUES
 ) AS area_data(name, pincode, lat, lng, radius_km)
 WHERE c.slug = 'chennai' AND s.code = 'TN'
 ON CONFLICT (city_id, name) DO NOTHING;
+
+-- ── 31 ADDITIONAL PILOT CITIES ────────────────────────────────────
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Surat', 'surat', 21.1702, 72.8311 FROM states s WHERE s.code = 'GJ' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Lucknow', 'lucknow', 26.8467, 80.9462 FROM states s WHERE s.code = 'UP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Kanpur', 'kanpur', 26.4499, 80.3319 FROM states s WHERE s.code = 'UP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Indore', 'indore', 22.7196, 75.8577 FROM states s WHERE s.code = 'MP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Thane', 'thane', 19.2183, 72.9781 FROM states s WHERE s.code = 'MH' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Bhopal', 'bhopal', 23.2599, 77.4126 FROM states s WHERE s.code = 'MP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Patna', 'patna', 25.5941, 85.1376 FROM states s WHERE s.code = 'BR' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Vadodara', 'vadodara', 22.3072, 73.1812 FROM states s WHERE s.code = 'GJ' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Ghaziabad', 'ghaziabad', 28.6692, 77.4538 FROM states s WHERE s.code = 'UP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Ludhiana', 'ludhiana', 30.9010, 75.8573 FROM states s WHERE s.code = 'PB' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Agra', 'agra', 27.1767, 78.0081 FROM states s WHERE s.code = 'UP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Nashik', 'nashik', 19.9975, 73.7898 FROM states s WHERE s.code = 'MH' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Faridabad', 'faridabad', 28.4089, 77.3178 FROM states s WHERE s.code = 'HR' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Meerut', 'meerut', 28.9845, 77.7064 FROM states s WHERE s.code = 'UP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Rajkot', 'rajkot', 22.3039, 70.8022 FROM states s WHERE s.code = 'GJ' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Varanasi', 'varanasi', 25.3176, 82.9739 FROM states s WHERE s.code = 'UP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Srinagar', 'srinagar', 34.0837, 74.7973 FROM states s WHERE s.code = 'JK' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Aurangabad', 'aurangabad', 19.8762, 75.3433 FROM states s WHERE s.code = 'MH' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Dhanbad', 'dhanbad', 23.7957, 86.4304 FROM states s WHERE s.code = 'JH' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Amritsar', 'amritsar', 31.6340, 74.8723 FROM states s WHERE s.code = 'PB' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Navi Mumbai', 'navi-mumbai', 19.0330, 73.0297 FROM states s WHERE s.code = 'MH' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Allahabad', 'allahabad', 25.4358, 81.8463 FROM states s WHERE s.code = 'UP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Ranchi', 'ranchi', 23.3441, 85.3096 FROM states s WHERE s.code = 'JH' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Howrah', 'howrah', 22.5785, 88.3178 FROM states s WHERE s.code = 'WB' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Jabalpur', 'jabalpur', 23.1815, 79.9864 FROM states s WHERE s.code = 'MP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Gwalior', 'gwalior', 26.2183, 78.1828 FROM states s WHERE s.code = 'MP' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Jodhpur', 'jodhpur', 26.2389, 73.0243 FROM states s WHERE s.code = 'RJ' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Madurai', 'madurai', 9.9252, 78.1198 FROM states s WHERE s.code = 'TN' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Raipur', 'raipur', 21.2514, 81.6296 FROM states s WHERE s.code = 'CG' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Kota', 'kota', 25.2138, 75.8648 FROM states s WHERE s.code = 'RJ' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Guwahati', 'guwahati', 26.1445, 91.7362 FROM states s WHERE s.code = 'AS' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Chandigarh', 'chandigarh', 30.7333, 76.7794 FROM states s WHERE s.code = 'CH' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Dehradun', 'dehradun', 30.3165, 78.0322 FROM states s WHERE s.code = 'UK' ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO cities (state_id, name, slug, lat, lng) 
+SELECT s.id, 'Bhubaneswar', 'bhubaneswar', 20.2961, 85.8245 FROM states s WHERE s.code = 'OD' ON CONFLICT (slug) DO NOTHING;
+
+
+-- ── AREAS FOR ALL REMAINING CITIES ───────────────────────────────
+-- Seeding generic zones (Central, North, South, East, West) for every city 
+-- that doesn't have detailed neighborhoods, enabling full cascading location dropdowns.
+
+-- 1. Warangal Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Warangal Central', '506002', 17.9784, 79.5941, 3.5),
+  ('Hanamkonda', '506001', 18.0125, 79.5630, 3.5),
+  ('Kazipet', '506003', 17.9811, 79.5255, 3.5)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'warangal' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 2. Nizamabad Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Nizamabad Central', '503001', 18.6725, 78.0941, 3.5),
+  ('Subhash Nagar', '503002', 18.6811, 78.1022, 3.0),
+  ('Armoor Zone', '503224', 18.7903, 78.2916, 4.0)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'nizamabad' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 3. Pune Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Kothrud', '411038', 18.5074, 73.8077, 3.0),
+  ('Shivajinagar', '411005', 18.5314, 73.8446, 3.0),
+  ('Kalyani Nagar', '411006', 18.5463, 73.9033, 2.5),
+  ('Viman Nagar', '411014', 18.5679, 73.9143, 3.0)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'pune' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 4. Nagpur Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Dharampeth', '440010', 21.1438, 79.0577, 3.0),
+  ('Sadarpeth', '440001', 21.1633, 79.0805, 3.0),
+  ('Manish Nagar', '440015', 21.0921, 79.0822, 3.5)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'nagpur' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 5. Mysuru Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Gokulam', '570002', 12.3298, 76.6212, 3.0),
+  ('Jayalakshmipuram', '570012', 12.3188, 76.6288, 3.0),
+  ('Kuvempunagar', '570023', 12.2892, 76.6255, 3.5)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'mysuru' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 6. Coimbatore Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Gandhipuram', '641012', 11.0183, 76.9697, 3.0),
+  ('RS Puram', '641002', 11.0069, 76.9499, 3.0),
+  ('Peelamedu', '641004', 11.0289, 77.0125, 4.0)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'coimbatore' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 7. Kolkata Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Salt Lake City', '700091', 22.5834, 88.4208, 4.0),
+  ('Park Street', '700016', 22.5539, 88.3512, 3.0),
+  ('New Town', '700156', 22.5804, 88.4682, 4.5),
+  ('Gariahat', '700019', 22.5194, 88.3681, 3.0)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'kolkata' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 8. Jaipur Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('C Scheme', '302001', 26.9099, 75.8033, 2.5),
+  ('Malviya Nagar', '302017', 26.8524, 75.8239, 3.5),
+  ('Vaishali Nagar', '302021', 26.9022, 75.7412, 3.5)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'jaipur' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 9. Kochi Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Fort Kochi', '682001', 9.9678, 76.2425, 3.0),
+  ('Edappally', '682024', 10.0261, 76.3125, 3.5),
+  ('Kakkanad', '682030', 10.0125, 76.3533, 4.0)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'kochi' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 10. Ahmedabad Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Satellite', '380015', 23.0305, 72.5183, 3.0),
+  ('Navrangpura', '380009', 23.0372, 72.5577, 3.0),
+  ('Vastrapur', '380015', 23.0358, 72.5273, 2.5)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'ahmedabad' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 11. Visakhapatnam Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Gajuwaka', '530026', 17.6903, 83.2091, 4.0),
+  ('Madhurawada', '530048', 17.8016, 83.3512, 4.0),
+  ('MVP Colony', '530017', 17.7425, 83.3325, 3.0)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'visakhapatnam' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 12. Vijayawada Areas
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, area_data.lat, area_data.lng, area_data.radius_km
+FROM cities c JOIN states s ON c.state_id = s.id CROSS JOIN (VALUES
+  ('Benz Circle', '520010', 16.5012, 80.6433, 2.5),
+  ('One Town', '520001', 16.5188, 80.6125, 3.0),
+  ('Governorpet', '520002', 16.5125, 80.6288, 2.5)
+) AS area_data(name, pincode, lat, lng, radius_km) WHERE c.slug = 'vijayawada' ON CONFLICT (city_id, name) DO NOTHING;
+
+-- 13. Generic Area Helper for all remaining 31 cities
+-- Inserts 4 regional zones for each of the newly added cities
+INSERT INTO areas (city_id, state_id, name, pincode, lat, lng, radius_km)
+SELECT c.id, s.id, area_data.name, area_data.pincode, c.lat + area_data.offset_lat, c.lng + area_data.offset_lng, 4.0
+FROM cities c JOIN states s ON c.state_id = s.id
+CROSS JOIN (VALUES
+  ('Central Zone', '000001',  0.00,  0.00),
+  ('North Zone',   '000002',  0.03,  0.00),
+  ('South Zone',   '000003', -0.03,  0.00),
+  ('East Zone',    '000004',  0.00,  0.03),
+  ('West Zone',    '000005',  0.00, -0.03)
+) AS area_data(name, pincode, offset_lat, offset_lng)
+WHERE c.slug IN (
+  'surat', 'lucknow', 'kanpur', 'indore', 'thane', 'bhopal', 'patna', 'vadodara', 
+  'ghaziabad', 'ludhiana', 'agra', 'nashik', 'faridabad', 'meerut', 'rajkot', 
+  'varanasi', 'srinagar', 'aurangabad', 'dhanbad', 'amritsar', 'navi-mumbai', 
+  'allahabad', 'ranchi', 'howrah', 'jabalpur', 'gwalior', 'jodhpur', 'madurai', 
+  'raipur', 'kota', 'guwahati', 'chandigarh', 'dehradun', 'bhubaneswar'
+) ON CONFLICT (city_id, name) DO NOTHING;
+

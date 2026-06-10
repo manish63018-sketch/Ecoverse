@@ -71,7 +71,7 @@ export function MissionStrip() {
     <section
       id="mission"
       style={{
-        background: "var(--color-bg-dark-alt)",
+        background: "rgba(21, 35, 23, 0.82)",
         borderTop: "1px solid var(--color-border-dark)",
         borderBottom: "1px solid var(--color-border-dark)",
         padding: "60px 24px",

@@ -31,7 +31,7 @@ export function Footer() {
   return (
     <footer
       style={{
-        background: "var(--color-bg-dark)",
+        background: "rgba(15, 26, 16, 0.90)",
         borderTop: "1px solid var(--color-border-dark)",
         paddingTop: "80px",
         paddingBottom: "40px",

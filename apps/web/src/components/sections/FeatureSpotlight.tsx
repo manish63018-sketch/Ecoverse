@@ -479,7 +479,7 @@ export function FeatureSpotlight() {
     <section
       id="features"
       style={{
-        background: "var(--color-bg-dark)",
+        background: "rgba(15, 26, 16, 0.80)",
         padding: "100px 24px",
       }}
     >
