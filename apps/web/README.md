@@ -29,8 +29,37 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## 3-Level Location Isolation System (PostgreSQL Setup)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+EcoVerse uses a strict 3-tier location hierarchy (State → City → Area) to isolate rescue alerts and cases. A rescue reported in a specific area (e.g. Banjara Hills, Hyderabad) will **only** notify and appear to volunteers assigned to that area.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 1. Database Configuration
+Create or update `apps/web/.env.local` with your PostgreSQL database URL:
+
+```bash
+DATABASE_URL="postgresql://<username>:<password>@localhost:5432/<database_name>"
+```
+
+### 2. Run Database Migrations & Seeds
+Use the built-in package scripts from the `apps/web/` directory to manage your schema:
+
+- **Run migrations only** (creates schema tables: states, cities, areas, ngos, rescue_cases, notifications, logs):
+  ```bash
+  npm run db:migrate
+  ```
+- **Seed initial location tree** (populates 33 states/UTs, 17 major cities, and 39 Hyderabad areas):
+  ```bash
+  npm run db:seed
+  ```
+- **Reset database** (WARNING: wipes all data, re-creates tables, and seeds location list):
+  ```bash
+  npm run db:reset
+  ```
+
+### 3. Verification & Isolation Flow
+1. **Configure Alert Zone**: Go to `/profile` on the running web app, open **My Alert Zone**, select your state, city, and area, and click save.
+2. **Report SOS**: Go to `/sos`, select your animal type, severity, and area (e.g. Banjara Hills), and submit.
+3. **Check Isolation**: 
+   - A volunteer logged in with a Banjara Hills zone will see this case immediately on their `/dashboard` and `/rescue` feeds.
+   - A volunteer in another zone (e.g., Secunderabad or Bangalore) will see **0 active cases**, ensuring strict, leak-proof location isolation.
+

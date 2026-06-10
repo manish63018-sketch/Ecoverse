@@ -1,19 +1,26 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import {
   doc, getDoc, collection, query, where,
-  getDocs, orderBy, limit, updateDoc,
+  getDocs, limit, updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import {
   MapPin, Shield, Activity, Settings, ArrowLeft,
-  ToggleLeft, ToggleRight, Star, Award, Zap,
+  ToggleLeft, ToggleRight, CheckCircle, Navigation,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import dynamic from "next/dynamic";
+import type { LocationSelection } from "@/types/location";
+
+const LocationPicker = dynamic(
+  () => import("@/components/sections/LocationPicker"),
+  { ssr: false }
+);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface UserProfile {
@@ -115,6 +122,12 @@ export default function ProfilePage() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [togglingAvail, setTogglingAvail] = useState(false);
 
+  // 3-level location state
+  const [locationSelection, setLocationSelection] = useState<LocationSelection | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ display_zone?: string; area_name?: string } | null>(null);
+  const [savingLocation, setSavingLocation] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
   useEffect(() => {
     if (!loading && !user) {
       router.push("/login");
@@ -149,6 +162,23 @@ export default function ProfilePage() {
         } catch {
           // index may not exist yet — silently skip
         }
+
+        // Load existing location profile from PostgreSQL
+        try {
+          const res = await fetch(`/api/users/location?firebase_uid=${user.uid}`);
+          if (res.ok) {
+            const data = await res.json();
+            const locProfile = data.profile;
+            if (locProfile?.area_id) {
+              setCurrentLocation({
+                display_zone: locProfile.display_zone,
+                area_name: locProfile.area_name,
+              });
+            }
+          }
+        } catch {
+          // DB may not be configured — silently skip
+        }
       } catch (err) {
         console.error("Profile fetch error:", err);
       } finally {
@@ -158,6 +188,34 @@ export default function ProfilePage() {
 
     fetchAll();
   }, [user]);
+
+  const handleSaveLocation = useCallback(async () => {
+    if (!user || !locationSelection) return;
+    setSavingLocation(true);
+    try {
+      const res = await fetch("/api/users/location", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firebase_uid: user.uid,
+          state_id: locationSelection.stateId,
+          city_id: locationSelection.cityId,
+          area_id: locationSelection.areaId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save location");
+
+      setCurrentLocation({ display_zone: locationSelection.displayZone, area_name: locationSelection.areaName });
+      setShowLocationPicker(false);
+      setLocationSelection(null);
+      toast.success(`📍 Location set to ${locationSelection.areaName}! You'll now receive area-specific rescue alerts.`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to save location");
+    } finally {
+      setSavingLocation(false);
+    }
+  }, [user, locationSelection]);
 
   const toggleAvailability = async () => {
     if (!user || !profile) return;
@@ -449,6 +507,108 @@ export default function ProfilePage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "24px" }} className="profile-grid">
           {/* ── Left column ───────────────────────────────────────────── */}
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+
+            {/* ── Location Zone (3-Level) Card ─────────────────────────── */}
+            <Card title="📍 My Alert Zone">
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Current location display */}
+                <div style={{
+                  padding: "14px 16px",
+                  background: currentLocation?.display_zone
+                    ? "rgba(102,187,106,0.07)"
+                    : "rgba(255,167,38,0.06)",
+                  border: `1px solid ${currentLocation?.display_zone ? "rgba(102,187,106,0.25)" : "rgba(255,167,38,0.2)"}`,
+                  borderRadius: "10px",
+                  display: "flex", alignItems: "flex-start", gap: "10px",
+                }}>
+                  {currentLocation?.display_zone ? (
+                    <>
+                      <CheckCircle size={16} style={{ color: "#66BB6A", flexShrink: 0, marginTop: "2px" }} />
+                      <div>
+                        <div style={{ fontWeight: 700, color: "#A5D6A7", fontSize: "0.9rem" }}>
+                          {currentLocation.display_zone}
+                        </div>
+                        <div style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", marginTop: "3px" }}>
+                          ✅ Rescue alerts are isolated to <strong style={{ color: "rgba(232,245,233,0.7)" }}>{currentLocation.area_name}</strong> only
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Navigation size={16} style={{ color: "#FFA726", flexShrink: 0, marginTop: "2px" }} />
+                      <div>
+                        <div style={{ fontWeight: 700, color: "#FFA726", fontSize: "0.875rem" }}>No Alert Zone Set</div>
+                        <div style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", marginTop: "3px" }}>
+                          Set your area below to receive location-isolated rescue notifications
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Toggle picker */}
+                {!showLocationPicker ? (
+                  <button
+                    onClick={() => setShowLocationPicker(true)}
+                    style={{
+                      background: "rgba(102,187,106,0.1)",
+                      border: "1px solid rgba(102,187,106,0.25)",
+                      color: "#A5D6A7", padding: "9px 18px",
+                      borderRadius: "9px", fontWeight: 600,
+                      cursor: "pointer", fontSize: "0.85rem",
+                      fontFamily: "var(--font-sans)", transition: "all 0.15s",
+                      display: "flex", alignItems: "center", gap: "6px", width: "fit-content",
+                    }}
+                  >
+                    <MapPin size={14} />
+                    {currentLocation?.display_zone ? "Change My Area" : "Set My Area"}
+                  </button>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <LocationPicker
+                      onChange={setLocationSelection}
+                      required={false}
+                    />
+                    <div style={{ display: "flex", gap: "10px" }}>
+                      <button
+                        onClick={handleSaveLocation}
+                        disabled={!locationSelection || savingLocation}
+                        style={{
+                          background: locationSelection ? "linear-gradient(135deg, #2E7D32, #66BB6A)" : "rgba(100,100,100,0.2)",
+                          border: "none", color: "#FFFFFF",
+                          padding: "10px 20px", borderRadius: "9px",
+                          fontWeight: 700, cursor: locationSelection ? "pointer" : "not-allowed",
+                          fontSize: "0.85rem", fontFamily: "var(--font-sans)",
+                          transition: "all 0.15s",
+                          display: "flex", alignItems: "center", gap: "6px",
+                        }}
+                      >
+                        {savingLocation ? "Saving..." : "✅ Save Location"}
+                      </button>
+                      <button
+                        onClick={() => { setShowLocationPicker(false); setLocationSelection(null); }}
+                        style={{
+                          background: "rgba(10,16,11,0.5)",
+                          border: "1px solid rgba(102,187,106,0.15)",
+                          color: "rgba(232,245,233,0.5)", padding: "10px 16px",
+                          borderRadius: "9px", fontWeight: 600,
+                          cursor: "pointer", fontSize: "0.85rem",
+                          fontFamily: "var(--font-sans)",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ fontSize: "0.72rem", color: "rgba(232,245,233,0.35)", display: "flex", alignItems: "center", gap: "5px" }}>
+                  <Shield size={11} />
+                  Your location is used only for rescue alert routing — never shared publicly
+                </div>
+              </div>
+            </Card>
+
             {/* Roles */}
             <Card title="My Roles">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>

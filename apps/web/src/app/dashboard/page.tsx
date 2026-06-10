@@ -1,13 +1,17 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { LogOut, MapPin, Shield, Activity, Users, Plus, Bell, BookOpen, Clock } from "lucide-react";
+import { 
+  LogOut, MapPin, Shield, Activity, Users, Plus, 
+  Bell, BookOpen, Clock, AlertCircle, Layers, CheckCircle, Navigation 
+} from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import type { RescueCase } from "@/types/rescue";
 
 interface UserProfile {
   displayName: string;
@@ -18,16 +22,9 @@ interface UserProfile {
   availableNow?: boolean;
 }
 
-interface RescueCase {
-  caseId: string;
-  animalType: string;
-  conditionDescription: string;
-  severity: string;
-  status: string;
-  reporterContact: { name: string; phone: string };
-  location: { addressText: string };
-  createdAt: string;
-  assignedVolunteerId: string | null;
+interface ReporterDetails {
+  name: string;
+  phone: string;
 }
 
 export default function DashboardPage() {
@@ -38,8 +35,18 @@ export default function DashboardPage() {
   const [isAvailable, setIsAvailable] = useState(false);
   const [togglingAvail, setTogglingAvail] = useState(false);
   
-  // Realtime rescues states
+  // PostgreSQL location and feed states
   const [rescues, setRescues] = useState<RescueCase[]>([]);
+  const [userLocation, setUserLocation] = useState<{
+    area_id?: string;
+    city_id?: string;
+    state_id?: string;
+    display_zone?: string;
+    area_name?: string;
+  } | null>(null);
+  const [scope, setScope] = useState<"area" | "city">("area");
+  const [loadingCases, setLoadingCases] = useState(true);
+  const [reporterDetails, setReporterDetails] = useState<Record<string, ReporterDetails>>({});
 
   useEffect(() => {
     if (loading) return;
@@ -71,28 +78,109 @@ export default function DashboardPage() {
       }
     };
 
+    // Load location profile from Postgres
+    const fetchUserLocation = async () => {
+      try {
+        const res = await fetch(`/api/users/location?firebase_uid=${user.uid}`);
+        if (res.ok) {
+          const data = await res.json();
+          const locProfile = data.profile;
+          if (locProfile) {
+            setUserLocation({
+              area_id: locProfile.area_id ?? undefined,
+              city_id: locProfile.city_id ?? undefined,
+              state_id: locProfile.state_id ?? undefined,
+              display_zone: locProfile.display_zone,
+              area_name: locProfile.area_name,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error loading user Postgres location profile:", err);
+      }
+    };
+
     fetchProfile();
+    fetchUserLocation();
   }, [user, loading, router]);
 
-  // Subscribe to real-time rescues in the user's city once profile is loaded
+  // Fetch rescue cases from Postgres via the API route
+  const fetchRescues = useCallback(async () => {
+    if (!user || !profile) return;
+    setLoadingCases(true);
+
+    try {
+      let url = "/api/rescues";
+      if (userLocation) {
+        if (scope === "area" && userLocation.area_id) {
+          url += `?area_id=${userLocation.area_id}`;
+        } else if (scope === "city" && userLocation.city_id) {
+          url += `?city_id=${userLocation.city_id}`;
+        } else {
+          url += `?firebase_uid=${user.uid}`;
+        }
+      } else {
+        url += `?firebase_uid=${user.uid}`;
+      }
+
+      const res = await fetch(url);
+      const data = await res.json();
+      setRescues(data.cases ?? []);
+    } catch (err) {
+      console.error("Failed to fetch rescue cases", err);
+      toast.error("Failed to load rescue feed");
+    } finally {
+      setLoadingCases(false);
+    }
+  }, [user, profile, scope, userLocation]);
+
   useEffect(() => {
     if (!profile) return;
+    fetchRescues();
+    const interval = setInterval(fetchRescues, 30000);
+    return () => clearInterval(interval);
+  }, [profile, fetchRescues]);
 
-    const q = query(
-      collection(db, "rescues"),
-      where("status", "in", ["reported", "dispatched", "in_progress"])
-    );
+  // Load reporter contact info on demand for assigned rescue cases
+  useEffect(() => {
+    if (!user || rescues.length === 0) return;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const cases: RescueCase[] = [];
-      snapshot.forEach((doc) => {
-        cases.push({ caseId: doc.id, ...doc.data() } as RescueCase);
-      });
-      setRescues(cases);
-    });
+    const fetchReporters = async () => {
+      const missingIds = rescues
+        .filter(r => r.assigned_volunteer_id === user.uid && r.reporter_user_id && !reporterDetails[r.reporter_user_id])
+        .map(r => r.reporter_user_id) as string[];
 
-    return () => unsubscribe();
-  }, [profile]);
+      if (missingIds.length === 0) return;
+
+      const newDetails = { ...reporterDetails };
+      let updated = false;
+
+      for (const repId of missingIds) {
+        try {
+          const docRef = doc(db, "users", repId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            newDetails[repId] = {
+              name: data.displayName || "Anonymous",
+              phone: data.phoneNumber || data.phone || "Not provided",
+            };
+            updated = true;
+          } else {
+            newDetails[repId] = { name: "Anonymous", phone: "Not provided" };
+            updated = true;
+          }
+        } catch (err) {
+          console.error("Error loading reporter details:", err);
+        }
+      }
+      if (updated) {
+        setReporterDetails(newDetails);
+      }
+    };
+
+    fetchReporters();
+  }, [rescues, user, reporterDetails]);
 
   if (loading || verifying) {
     return (
@@ -140,28 +228,35 @@ export default function DashboardPage() {
 
   const handleAcceptDispatch = async (caseId: string) => {
     try {
-      const rescueRef = doc(db, "rescues", caseId);
-      await updateDoc(rescueRef, {
-        status: "in_progress",
-        assignedVolunteerId: user.uid,
+      const res = await fetch(`/api/rescues/${caseId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volunteer_id: user.uid, response: "accepted" }),
       });
-      toast.success("Rescue case accepted! You are now dispatched.");
-    } catch (error) {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to accept");
+      toast.success("✅ Rescue case accepted! You are now dispatched.");
+      fetchRescues();
+    } catch (error: any) {
       console.error("Error accepting rescue case:", error);
-      toast.error("Failed to accept rescue case");
+      toast.error(error.message || "Failed to accept rescue case");
     }
   };
 
   const handleResolveCase = async (caseId: string) => {
     try {
-      const rescueRef = doc(db, "rescues", caseId);
-      await updateDoc(rescueRef, {
-        status: "resolved",
+      const res = await fetch(`/api/rescues/${caseId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "resolved" }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to resolve");
       toast.success("Rescue marked as completed! Awarded 🏅 Rescue Badge.");
-    } catch (error) {
+      fetchRescues();
+    } catch (error: any) {
       console.error("Error resolving rescue case:", error);
-      toast.error("Failed to resolve rescue case");
+      toast.error(error.message || "Failed to resolve rescue case");
     }
   };
 
@@ -324,7 +419,7 @@ export default function DashboardPage() {
                 <div style={{ display: "flex", gap: "16px", marginTop: "12px", fontSize: "0.85rem", color: "rgba(232, 245, 233, 0.8)" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                     <MapPin size={14} style={{ color: "#66BB6A" }} />
-                    {profile.city.charAt(0).toUpperCase() + profile.city.slice(1)}, IN
+                    {userLocation?.display_zone || (profile.city ? profile.city.charAt(0).toUpperCase() + profile.city.slice(1) + ", IN" : "India")}
                   </span>
                   <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                     <Shield size={14} style={{ color: "#66BB6A" }} />
@@ -421,49 +516,156 @@ export default function DashboardPage() {
                 padding: "28px",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                <h3 style={{ fontSize: "1.25rem", fontWeight: 700 }}>Nearby Rescue Feed ({rescues.length} Cases)</h3>
-                <Link href="/map" style={{ fontSize: "0.85rem", color: "#66BB6A", textDecoration: "none", fontWeight: 600 }}>
-                  View Live Map
-                </Link>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
+                <div>
+                  <h3 style={{ fontSize: "1.25rem", fontWeight: 700 }}>Nearby Rescue Feed ({rescues.length} Cases)</h3>
+                  {userLocation?.display_zone && (
+                    <span style={{
+                      fontSize: "0.68rem", fontWeight: 700, padding: "2px 8px",
+                      borderRadius: "4px", background: "rgba(102,187,106,0.1)",
+                      border: "1px solid rgba(102,187,106,0.2)", color: "#A5D6A7",
+                      display: "inline-block", marginTop: "4px"
+                    }}>
+                      {scope === "area" ? `📍 Area: ${userLocation.area_name}` : `🏙 City: ${userLocation.display_zone.split(",")[1]?.trim() || "My City"}`} isolated
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <Link href="/rescue" style={{ fontSize: "0.85rem", color: "#66BB6A", textDecoration: "none", fontWeight: 600 }}>
+                    Rescue Board
+                  </Link>
+                  <Link href="/map" style={{ fontSize: "0.85rem", color: "#66BB6A", textDecoration: "none", fontWeight: 600 }}>
+                    View Live Map
+                  </Link>
+                </div>
               </div>
 
-              {rescues.length === 0 ? (
+              {/* Location Scope Warning if not configured */}
+              {!userLocation?.area_id && (
+                <div style={{
+                  padding: "16px 20px",
+                  background: "rgba(255,167,38,0.08)",
+                  border: "1px solid rgba(255,167,38,0.25)",
+                  borderRadius: "12px",
+                  marginBottom: "20px",
+                  display: "flex", gap: "12px", alignItems: "flex-start",
+                }}>
+                  <AlertCircle size={18} style={{ color: "#FFA726", flexShrink: 0, marginTop: "2px" }} />
+                  <div>
+                    <div style={{ fontWeight: 700, color: "#FFA726", fontSize: "0.9rem" }}>Location Alert Zone Not Set</div>
+                    <p style={{ color: "rgba(232, 245, 233, 0.6)", fontSize: "0.82rem", margin: "4px 0 8px 0" }}>
+                      Your area is not configured. Set your Alert Zone in your profile to see location-isolated rescue cases.
+                    </p>
+                    <Link
+                      href="/profile"
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "6px",
+                        color: "#FFA726", fontWeight: 700, fontSize: "0.8rem",
+                        textDecoration: "none", padding: "6px 12px",
+                        background: "rgba(255,167,38,0.1)", borderRadius: "6px",
+                        border: "1px solid rgba(255,167,38,0.25)",
+                      }}
+                    >
+                      <MapPin size={13} /> Configure Alert Zone
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Scope Switcher if location set */}
+              {userLocation?.area_id && (
+                <div style={{
+                  background: "rgba(10,16,11,0.5)",
+                  border: "1px solid rgba(102,187,106,0.1)",
+                  borderRadius: "12px",
+                  padding: "12px 16px",
+                  marginBottom: "20px",
+                  display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center",
+                  justifyContent: "space-between",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Layers size={13} style={{ color: "#66BB6A" }} />
+                    <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "rgba(232,245,233,0.6)" }}>Show cases in:</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    {(["area", "city"] as const).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setScope(s)}
+                        style={{
+                          background: scope === s ? "rgba(102,187,106,0.18)" : "rgba(10,16,11,0.5)",
+                          border: `1px solid ${scope === s ? "rgba(102,187,106,0.4)" : "rgba(102,187,106,0.08)"}`,
+                          color: scope === s ? "#A5D6A7" : "rgba(232,245,233,0.4)",
+                          borderRadius: "6px",
+                          padding: "5px 12px",
+                          fontSize: "0.75rem",
+                          fontWeight: scope === s ? 700 : 500,
+                          cursor: "pointer",
+                          fontFamily: "var(--font-sans)",
+                          transition: "all 0.15s",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {s === "area" ? `📍 ${userLocation.area_name ?? "My Area"}` : "🏙 My City"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {loadingCases ? (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <div className="spinner-green" />
+                  <p style={{ color: "rgba(232, 245, 233, 0.4)", fontSize: "0.85rem", marginTop: "12px" }}>Loading rescues...</p>
+                </div>
+              ) : rescues.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(232, 245, 233, 0.5)" }}>
                   <Activity size={32} style={{ color: "#66BB6A", marginBottom: "12px", opacity: 0.7 }} />
-                  <p>No active rescue dispatches in your area.</p>
-                  <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Report a case to trigger notifications!</p>
+                  <p>{userLocation?.area_id ? `No active rescues in your ${scope === "area" ? "area" : "city"} right now.` : "No active rescues found."}</p>
+                  <p style={{ fontSize: "0.8rem", marginTop: "4px" }}>Report a case to alert nearby volunteers!</p>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                   {rescues.map((rescue) => {
-                    const isAssignedToMe = rescue.assignedVolunteerId === user.uid;
-                    const isDispatched = rescue.status === "in_progress";
+                    const isAssignedToMe = rescue.assigned_volunteer_id === user.uid;
+                    const isDispatched = rescue.status === "in_progress" || rescue.status === "assigned";
+                    const reporter = rescue.reporter_user_id ? reporterDetails[rescue.reporter_user_id] : null;
+                    const animalIcon = { dog: "🐶", cat: "🐱", cow: "🐮", bird: "🐦", pigeon: "🕊️" }[rescue.animal_type] || "🐾";
+                    const severity = rescue.emergency_level || "medium";
+                    const displayLocation = rescue.display_zone || rescue.area_name;
+
                     return (
-                      <div key={rescue.caseId} className="case-item">
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                          <span style={{ fontWeight: 600, color: "#FFFFFF" }}>
-                            {rescue.animalType.toUpperCase()} ({rescue.conditionDescription})
+                      <div key={rescue.id} className="case-item">
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", alignItems: "center" }}>
+                          <span style={{ fontWeight: 600, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span>{animalIcon}</span>
+                            <span style={{ textTransform: "capitalize" }}>{rescue.animal_type} Rescue</span>
                           </span>
                           <span
                             style={{
-                              color: rescue.severity === "critical" ? "#EF5350" : "#FFA726",
-                              background: rescue.severity === "critical" ? "rgba(239, 83, 80, 0.15)" : "rgba(255, 167, 38, 0.15)",
+                              color: severity === "critical" ? "#EF5350" : severity === "high" ? "#FFA726" : severity === "medium" ? "#FFE082" : "#A5D6A7",
+                              background: severity === "critical" ? "rgba(239, 83, 80, 0.15)" : severity === "high" ? "rgba(255, 167, 38, 0.15)" : severity === "medium" ? "rgba(255, 213, 79, 0.12)" : "rgba(102, 187, 106, 0.12)",
                               padding: "2px 8px",
                               borderRadius: "4px",
                               fontSize: "0.75rem",
                               fontWeight: 600,
+                              textTransform: "uppercase"
                             }}
                           >
-                            {rescue.severity.toUpperCase()}
+                            {severity}
                           </span>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                          <p style={{ color: "rgba(232, 245, 233, 0.6)", fontSize: "0.85rem", margin: 0 }}>
-                            Location: {rescue.location.addressText}
+                          <p style={{ fontSize: "0.875rem", color: "rgba(232, 245, 233, 0.95)", margin: "0 0 4px 0" }}>
+                            {rescue.condition_summary}
                           </p>
-                          {/* Contact detail if assigned to current user */}
-                          {isAssignedToMe && rescue.reporterContact && (
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", color: "rgba(232, 245, 233, 0.6)" }}>
+                            <MapPin size={13} style={{ color: "#66BB6A" }} />
+                            <span>{displayLocation}</span>
+                          </div>
+                          
+                          {/* Reporter Details (only visible if accepted by current volunteer) */}
+                          {isAssignedToMe && reporter && (
                             <div style={{
                               marginTop: "8px",
                               padding: "10px 14px",
@@ -473,23 +675,25 @@ export default function DashboardPage() {
                               fontSize: "0.8rem",
                             }}>
                               <div style={{ fontWeight: 600, color: "#A5D6A7", marginBottom: "4px" }}>📞 Reporter Contact Details:</div>
-                              <div>Name: {rescue.reporterContact.name || "Anonymous"}</div>
-                              <div>Phone: <a href={`tel:${rescue.reporterContact.phone}`} style={{ color: "#66BB6A", fontWeight: 700, textDecoration: "none" }}>{rescue.reporterContact.phone}</a></div>
+                              <div>Name: {reporter.name}</div>
+                              <div>Phone: <a href={`tel:${reporter.phone}`} style={{ color: "#66BB6A", fontWeight: 700, textDecoration: "none" }}>{reporter.phone}</a></div>
                             </div>
                           )}
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px", fontSize: "0.75rem", color: "rgba(232, 245, 233, 0.5)" }}>
                           <span style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
                             <Clock size={12} />
-                            Reported {rescue.createdAt ? new Date(rescue.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "recently"}
-                            <span style={{ color: "rgba(232, 245, 233, 0.45)", marginLeft: "6px" }}>
-                              by {rescue.reporterContact?.name ? rescue.reporterContact.name.split(" ")[0] : "Anonymous"}
-                            </span>
+                            Reported {rescue.created_at ? new Date(rescue.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "recently"}
+                            {isAssignedToMe && reporter && (
+                              <span style={{ color: "rgba(232, 245, 233, 0.45)", marginLeft: "6px" }}>
+                                by {reporter.name.split(" ")[0]}
+                              </span>
+                            )}
                           </span>
                           
                           {isAssignedToMe ? (
                             <button
-                              onClick={() => handleResolveCase(rescue.caseId)}
+                              onClick={() => handleResolveCase(rescue.id)}
                               className="action-btn resolve-btn"
                             >
                               Complete Rescue
@@ -498,7 +702,7 @@ export default function DashboardPage() {
                             <span style={{ color: "#42A5F5", fontWeight: 600 }}>Volunteer Dispatched</span>
                           ) : (
                             <button
-                              onClick={() => handleAcceptDispatch(rescue.caseId)}
+                              onClick={() => handleAcceptDispatch(rescue.id)}
                               className="action-btn"
                             >
                               Accept Dispatch
@@ -625,6 +829,15 @@ export default function DashboardPage() {
           transform: translateY(-2px);
           border-color: rgba(102, 187, 106, 0.35);
           box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
+        }
+        .spinner-green {
+          width: 32px;
+          height: 32px;
+          border: 3px solid rgba(102, 187, 106, 0.2);
+          border-radius: 50%;
+          border-top-color: #66BB6A;
+          animation: spin 0.8s linear infinite;
+          margin: 20px auto;
         }
         @media (min-width: 992px) {
           .top-row {
