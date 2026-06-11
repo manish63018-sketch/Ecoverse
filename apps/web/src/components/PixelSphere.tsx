@@ -332,10 +332,16 @@ export default function PixelSphere() {
         const currentDrift = driftAmount * (1 - dissolveState);
         const noiseF = (1 - dissolveState) * 15;
         
-        // Final position (scaled original + outward normal drift + noisy drift)
-        const px = (dot.ux * sphereR) + (dot.nx * currentDrift) + (dot.noiseX * noiseF);
-        const py = (dot.uy * sphereR) + (dot.ny * currentDrift) + (dot.noiseY * noiseF);
-        const pz = (dot.uz * sphereR) + (dot.nz * currentDrift) + (dot.noiseZ * noiseF);
+        // Dynamic organic time-based floating/vibrating motion for individual dots
+        const timeSec = time * 0.001;
+        const waveX = Math.sin(timeSec * 2.0 + dot.dissolveOffset * 15) * 8 + Math.cos(timeSec * 0.9 + dot.dissolveOffset * 8) * 4;
+        const waveY = Math.cos(timeSec * 1.6 + dot.dissolveOffset * 20) * 8 + Math.sin(timeSec * 0.8 + dot.dissolveOffset * 10) * 4;
+        const waveZ = Math.sin(timeSec * 2.4 + dot.dissolveOffset * 10) * 8 + Math.cos(timeSec * 0.7 + dot.dissolveOffset * 12) * 4;
+
+        // Final position (scaled original + organic wave + outward normal drift + noisy drift)
+        const px = (dot.ux * sphereR) + waveX + (dot.nx * currentDrift) + (dot.noiseX * noiseF);
+        const py = (dot.uy * sphereR) + waveY + (dot.ny * currentDrift) + (dot.noiseY * noiseF);
+        const pz = (dot.uz * sphereR) + waveZ + (dot.nz * currentDrift) + (dot.noiseZ * noiseF);
 
         // Rotate in 3D
         // Y-axis Rotation

@@ -221,14 +221,26 @@ export default function EarthGlobe() {
       dot: GlobeDot; visible: boolean;
     };
     const projected: Projected[] = [];
+    const timeSec = timestamp * 0.001;
 
     for (const dot of s.dots) {
+      // Dynamic time-based organic floating/vibrating motion for each individual dot (making them move independently)
+      const waveX = Math.sin(timeSec * 2.2 + dot.brightness * 20) * 0.08 + Math.cos(timeSec * 0.8 + dot.brightness * 10) * 0.04;
+      const waveY = Math.cos(timeSec * 1.8 + dot.brightness * 25) * 0.08 + Math.sin(timeSec * 0.7 + dot.brightness * 12) * 0.04;
+      const waveZ = Math.sin(timeSec * 2.5 + dot.brightness * 15) * 0.08 + Math.cos(timeSec * 0.9 + dot.brightness * 8) * 0.04;
+      
+      const breathe = 1.0 + Math.sin(timeSec * 1.5 + dot.brightness * 5) * 0.05;
+      
+      const ux = (dot.x + waveX) * breathe;
+      const uy = (dot.y + waveY) * breathe;
+      const uz = (dot.z + waveZ) * breathe;
+
       // 1) Y-axis rotation (spin)
-      const x1 =  dot.x * cosY + dot.z * sinY;
-      const z1 = -dot.x * sinY + dot.z * cosY;
+      const x1 =  ux * cosY + uz * sinY;
+      const z1 = -ux * sinY + uz * cosY;
       // 2) X-axis rotation (tilt)
-      const y2 =  dot.y * cosX - z1 * sinX;
-      const z2 =  dot.y * sinX + z1 * cosX;
+      const y2 =  uy * cosX - z1 * sinX;
+      const z2 =  uy * sinX + z1 * cosX;
 
       // Perspective
       const depth = (z2 + 1) / 2;   // 0 = back, 1 = front
