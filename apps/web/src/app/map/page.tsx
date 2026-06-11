@@ -6,11 +6,15 @@ import { ArrowLeft, MapPin, Activity, Shield, Users, AlertCircle, Volume2, Volum
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import dynamic from "next/dynamic";
+import { useAuth } from "@/context/AuthContext";
+import { Navbar } from "@/components/layout/Navbar";
 
 // Dynamic import of Leaflet map to prevent SSR issues
 const LiveMap = dynamic(() => import("@/components/sections/LiveMap"), { ssr: false });
 
 export default function MapPage() {
+  const { user, loading: authLoading } = useAuth();
+  
   const [volunteersCount, setVolunteersCount] = useState(0);
   const [ngosCount, setNgosCount] = useState(0);
   const [rescuesCount, setRescuesCount] = useState(0);
@@ -81,35 +85,56 @@ export default function MapPage() {
   };
 
   useEffect(() => {
+    if (authLoading) return;
+
     // 1. Count Volunteers
     const qVolunteers = query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"));
-    const unsubVolunteers = onSnapshot(qVolunteers, (snapshot) => {
-      let count = 0;
-      snapshot.forEach((doc) => {
-        if (doc.data().volunteerInfo?.availableNow) count++;
-      });
-      setVolunteersCount(count);
-      setIsConnected(true); // Firestore connection confirmed
-    }, () => setIsConnected(false));
+    const unsubVolunteers = onSnapshot(
+      qVolunteers,
+      (snapshot) => {
+        let count = 0;
+        snapshot.forEach((doc) => {
+          if (doc.data().volunteerInfo?.availableNow) count++;
+        });
+        setVolunteersCount(count);
+        setIsConnected(true); // Firestore connection confirmed
+      },
+      (error) => {
+        console.warn("Firestore volunteer listener error:", error);
+        setIsConnected(false);
+      }
+    );
 
     // 2. Count NGOs
     const qNgos = query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo"));
-    const unsubNgos = onSnapshot(qNgos, (snapshot) => {
-      setNgosCount(snapshot.size);
-    });
+    const unsubNgos = onSnapshot(
+      qNgos,
+      (snapshot) => {
+        setNgosCount(snapshot.size);
+      },
+      (error) => {
+        console.warn("Firestore NGO listener error:", error);
+      }
+    );
 
     // 3. Count Open Rescues
     const qRescues = query(collection(db, "rescues"), where("status", "in", ["reported", "dispatched", "in_progress"]));
-    const unsubRescues = onSnapshot(qRescues, (snapshot) => {
-      setRescuesCount(snapshot.size);
-    });
+    const unsubRescues = onSnapshot(
+      qRescues,
+      (snapshot) => {
+        setRescuesCount(snapshot.size);
+      },
+      (error) => {
+        console.warn("Firestore rescues listener error:", error);
+      }
+    );
 
     return () => {
       unsubVolunteers();
       unsubNgos();
       unsubRescues();
     };
-  }, []);
+  }, [user, authLoading]);
 
   // Alert trigger when rescuesCount changes from 0 -> >0
   useEffect(() => {
@@ -132,133 +157,156 @@ export default function MapPage() {
         fontFamily: "var(--font-sans), sans-serif",
       }}
     >
-      {/* Top Navbar */}
-      <header
-        style={{
-          background: "rgba(15, 26, 16, 0.95)",
-          borderBottom: "1px solid rgba(102, 187, 106, 0.15)",
-          padding: "16px 24px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          zIndex: 100,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <Link href="/dashboard" style={{ display: "flex", alignItems: "center", color: "rgba(232,245,233,0.7)", textDecoration: "none" }}>
-            <ArrowLeft size={20} />
-          </Link>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <h1 style={{ fontSize: "1.2rem", fontWeight: 800, margin: 0 }}>EcoVerse Live India Map</h1>
-              {/* LIVE indicator — only green when Firestore connected */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span className={isConnected ? "live-dot live-dot-active" : "live-dot live-dot-inactive"} />
-                <span style={{
-                  fontSize: "0.65rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
-                  color: isConnected ? "#66BB6A" : "rgba(232,245,233,0.3)",
-                  textTransform: "uppercase",
-                }}>
-                  {isConnected ? "Live" : "Connecting..."}
-                </span>
+      {/* Global Navbar */}
+      <Navbar />
+
+      <div style={{ paddingTop: "72px", display: "flex", flexDirection: "column", flex: 1, position: "relative" }}>
+        
+        {/* Top Header Controls */}
+        <header
+          style={{
+            background: "rgba(15, 26, 16, 0.95)",
+            borderBottom: "1px solid rgba(102, 187, 106, 0.15)",
+            padding: "16px 24px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            zIndex: 100,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <Link href="/" style={{ display: "flex", alignItems: "center", color: "rgba(232,245,233,0.7)", textDecoration: "none" }}>
+              <ArrowLeft size={20} />
+            </Link>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <h1 style={{ fontSize: "1.2rem", fontWeight: 800, margin: 0 }}>EcoVerse Live India Map</h1>
+                {/* LIVE indicator — only green when Firestore connected */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className={isConnected ? "live-dot live-dot-active" : "live-dot live-dot-inactive"} />
+                  <span style={{
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    color: isConnected ? "#66BB6A" : "rgba(232,245,233,0.3)",
+                    textTransform: "uppercase",
+                  }}>
+                    {isConnected ? "Live" : "Connecting..."}
+                  </span>
+                </div>
+                
+                {/* Alert Sound Control */}
+                <button
+                  onClick={toggleSound}
+                  style={{
+                    background: soundEnabled ? "rgba(102, 187, 106, 0.12)" : "rgba(239, 83, 80, 0.12)",
+                    border: `1px solid ${soundEnabled ? "rgba(102, 187, 106, 0.3)" : "rgba(239, 83, 80, 0.3)"}`,
+                    color: soundEnabled ? "#66BB6A" : "#EF5350",
+                    borderRadius: "50%",
+                    width: "28px",
+                    height: "28px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    marginLeft: "4px",
+                    transition: "all 0.2s",
+                  }}
+                  title={soundEnabled ? "Mute alert sounds" : "Unmute alert sounds"}
+                >
+                  {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+                </button>
               </div>
-              
-              {/* Alert Sound Control */}
-              <button
-                onClick={toggleSound}
-                style={{
-                  background: soundEnabled ? "rgba(102, 187, 106, 0.12)" : "rgba(239, 83, 80, 0.12)",
-                  border: `1px solid ${soundEnabled ? "rgba(102, 187, 106, 0.3)" : "rgba(239, 83, 80, 0.3)"}`,
-                  color: soundEnabled ? "#66BB6A" : "#EF5350",
-                  borderRadius: "50%",
-                  width: "28px",
-                  height: "28px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  marginLeft: "4px",
-                  transition: "all 0.2s",
-                }}
-                title={soundEnabled ? "Mute alert sounds" : "Unmute alert sounds"}
-              >
-                {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
-              </button>
-            </div>
-            <p style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", margin: "2px 0 0 0" }}>
-              Real-time volunteer distribution and open rescue alerts
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "24px" }} className="counters-container">
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ background: "rgba(102, 187, 106, 0.15)", color: "#66BB6A", padding: "6px", borderRadius: "50%", display: "flex" }}>
-              <Users size={16} />
-            </div>
-            <div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{volunteersCount} Available</div>
-              <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>Volunteers</div>
+              <p style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", margin: "2px 0 0 0" }}>
+                Real-time volunteer distribution and open rescue alerts
+              </p>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ background: "rgba(239, 83, 80, 0.15)", color: "#EF5350", padding: "6px", borderRadius: "50%", display: "flex" }}>
-              <Activity size={16} />
+          <div style={{ display: "flex", alignItems: "center", gap: "24px" }} className="counters-container">
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ background: "rgba(102, 187, 106, 0.15)", color: "#66BB6A", padding: "6px", borderRadius: "50%", display: "flex" }}>
+                <Users size={16} />
+              </div>
+              <div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{volunteersCount} Available</div>
+                <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>Volunteers</div>
+              </div>
             </div>
-            <div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{rescuesCount} Active</div>
-              <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>SOS Dispatches</div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ background: "rgba(239, 83, 80, 0.15)", color: "#EF5350", padding: "6px", borderRadius: "50%", display: "flex" }}>
+                <Activity size={16} />
+              </div>
+              <div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{rescuesCount} Active</div>
+                <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>SOS Dispatches</div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ background: "rgba(66, 165, 245, 0.15)", color: "#42A5F5", padding: "6px", borderRadius: "50%", display: "flex" }}>
+                <Shield size={16} />
+              </div>
+              <div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{ngosCount} Verified</div>
+                <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>NGO Partners</div>
+              </div>
             </div>
           </div>
+        </header>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ background: "rgba(66, 165, 245, 0.15)", color: "#42A5F5", padding: "6px", borderRadius: "50%", display: "flex" }}>
-              <Shield size={16} />
-            </div>
-            <div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{ngosCount} Verified</div>
-              <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>NGO Partners</div>
-            </div>
+        {/* Guest Info Banner */}
+        {!user && (
+          <div style={{
+            background: "rgba(102, 187, 106, 0.08)",
+            borderBottom: "1px solid rgba(102, 187, 106, 0.2)",
+            padding: "10px 24px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            zIndex: 10,
+          }}>
+            <AlertCircle size={16} style={{ color: "#66BB6A" }} />
+            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#E8F5E9" }}>
+              📢 <strong>Live Map:</strong> Showing real-time volunteer and rescue case locations. <Link href="/login" style={{ color: "#66BB6A", textDecoration: "underline", fontWeight: 700 }}>Sign in</Link> or <Link href="/signup" style={{ color: "#66BB6A", textDecoration: "underline", fontWeight: 700 }}>Join EcoVerse</Link> to report SOS cases or accept dispatches.
+            </span>
           </div>
-        </div>
-      </header>
+        )}
 
-      {/* Active Emergency Banner — only shown when real open rescues exist */}
-      {rescuesCount > 0 && (
-        <div style={{
-          background: "rgba(239, 83, 80, 0.12)",
-          borderBottom: "1px solid rgba(239, 83, 80, 0.3)",
-          padding: "10px 24px",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          animation: "slideDown 0.3s ease",
-        }}>
-          <AlertCircle size={16} color="#EF5350" />
-          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#EF5350" }}>
-            🚨 {rescuesCount} active emergency{rescuesCount > 1 ? " cases" : " case"} open right now — nearby rescuers have been alerted.
-          </span>
-        </div>
-      )}
+        {/* Active Emergency Banner — only shown when real open rescues exist */}
+        {user && rescuesCount > 0 && (
+          <div style={{
+            background: "rgba(239, 83, 80, 0.12)",
+            borderBottom: "1px solid rgba(239, 83, 80, 0.3)",
+            padding: "10px 24px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            animation: "slideDown 0.3s ease",
+          }}>
+            <AlertCircle size={16} color="#EF5350" />
+            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#EF5350" }}>
+              🚨 {rescuesCount} active emergency{rescuesCount > 1 ? " cases" : " case"} open right now — nearby rescuers have been alerted.
+            </span>
+          </div>
+        )}
 
-      {/* No emergencies message when 0 rescues */}
-      {rescuesCount === 0 && isConnected && (
-        <div style={{
-          background: "rgba(102, 187, 106, 0.06)",
-          borderBottom: "1px solid rgba(102, 187, 106, 0.12)",
-          padding: "10px 24px",
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-        }}>
-          <span style={{ fontSize: "0.8rem", color: "rgba(232,245,233,0.4)" }}>
-            ✅ No active emergencies right now. All quiet on the rescue front.
-          </span>
-        </div>
-      )}
+        {/* No emergencies message when 0 rescues */}
+        {user && rescuesCount === 0 && isConnected && (
+          <div style={{
+            background: "rgba(102, 187, 106, 0.06)",
+            borderBottom: "1px solid rgba(102, 187, 106, 0.12)",
+            padding: "10px 24px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}>
+            <span style={{ fontSize: "0.8rem", color: "rgba(232,245,233,0.4)" }}>
+              ✅ No active emergencies right now. All quiet on the rescue front.
+            </span>
+          </div>
+        )}
 
       {/* Main Map Viewer */}
       <div style={{ flex: 1, position: "relative" }}>
@@ -362,6 +410,7 @@ export default function MapPage() {
             </div>
           </div>
         )}
+      </div>
       </div>
 
       <style>{`

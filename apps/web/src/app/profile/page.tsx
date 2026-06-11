@@ -16,6 +16,7 @@ import {
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
 import type { LocationSelection } from "@/types/location";
+import { getApiUrl } from "@/lib/api";
 
 const LocationPicker = dynamic(
   () => import("@/components/sections/LocationPicker"),
@@ -165,7 +166,7 @@ export default function ProfilePage() {
 
         // Load existing location profile from PostgreSQL
         try {
-          const res = await fetch(`/api/users/location?firebase_uid=${user.uid}`);
+          const res = await fetch(getApiUrl(`/api/users/location?firebase_uid=${user.uid}`));
           if (res.ok) {
             const data = await res.json();
             const locProfile = data.profile;
@@ -193,7 +194,7 @@ export default function ProfilePage() {
     if (!user || !locationSelection) return;
     setSavingLocation(true);
     try {
-      const res = await fetch("/api/users/location", {
+      const res = await fetch(getApiUrl("/api/users/location"), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

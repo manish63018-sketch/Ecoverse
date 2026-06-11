@@ -34,10 +34,10 @@ export default function TermsOfServicePage() {
             Terms of Service
           </h1>
           <p style={{ color: "rgba(232,245,233,0.55)", marginTop: "12px", lineHeight: 1.7 }}>
-            Last updated: June 2026 &nbsp;|&nbsp; Effective for ecoverse.in
+            Last updated: June 2026 &nbsp;|&nbsp; Effective for ecoverseindia.web.app
           </p>
           <p style={{ color: "rgba(232,245,233,0.7)", marginTop: "16px", lineHeight: 1.8 }}>
-            Welcome to EcoVerse. By accessing or using our platform at ecoverse.in, you agree to be bound by these Terms of Service. Please read them carefully. EcoVerse is built and maintained by <strong style={{ color: "#66BB6A" }}>mannish_2323 / Anti Gravity Studio</strong>.
+            Welcome to EcoVerse. By accessing or using our platform at ecoverseindia.web.app, you agree to be bound by these Terms of Service. Please read them carefully. EcoVerse is built and maintained by <strong style={{ color: "#66BB6A" }}>mannish_2323 / Anti Gravity Studio</strong>.
           </p>
         </div>
 
@@ -111,7 +111,7 @@ export default function TermsOfServicePage() {
         <LegalSection title="9. Contact">
           <LegalParagraph>
             Questions about these Terms? Reach us at:<br />
-            📧 <a href="mailto:support@ecoverse.in" style={{ color: "#66BB6A" }}>support@ecoverse.in</a><br />
+            📧 <a href="mailto:support@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>support@ecoverseindia.web.app</a><br />
             📸 Instagram: <a href="https://instagram.com/mannish_2323" target="_blank" rel="noopener noreferrer" style={{ color: "#66BB6A" }}>@mannish_2323</a>
           </LegalParagraph>
         </LegalSection>

@@ -578,7 +578,7 @@ export default function SettingsPage() {
                 Permanently delete your EcoVerse account and all associated data.
               </p>
               <a
-                href="mailto:support@ecoverse.in?subject=Account Deletion Request"
+                href="mailto:support@ecoverseindia.web.app?subject=Account Deletion Request"
                 style={{
                   display: "inline-block",
                   padding: "8px 16px",

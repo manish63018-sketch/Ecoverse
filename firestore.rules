@@ -170,6 +170,25 @@ service cloud.firestore {
         isValidDateString(data.createdAt);
     }
 
+    function isValidAdoptionPet(data) {
+      return hasRequiredFields(data, ['id', 'name', 'type', 'breed', 'age', 'ageGroup', 'gender', 'location', 'city', 'vaccinated', 'neutered', 'story', 'imageColor', 'emoji']) &&
+        hasOnlyAllowedFields(data, ['id', 'name', 'type', 'breed', 'age', 'ageGroup', 'gender', 'location', 'city', 'vaccinated', 'neutered', 'story', 'imageColor', 'emoji']) &&
+        data.id is string &&
+        data.name is string && data.name.size() >= 1 &&
+        data.type in ['dog', 'cat', 'bird', 'other'] &&
+        data.breed is string &&
+        data.age is string &&
+        data.ageGroup in ['puppy_kitten', 'adult', 'senior'] &&
+        data.gender in ['Male', 'Female'] &&
+        data.location is string &&
+        data.city is string &&
+        data.vaccinated is bool &&
+        data.neutered is bool &&
+        data.story is string && data.story.size() <= 2000 &&
+        data.imageColor is string &&
+        data.emoji is string;
+    }
+
     // ===============================================================
     // Rules Match Blocks
     // ===============================================================
@@ -184,7 +203,7 @@ service cloud.firestore {
 
     // 2. Public User Profiles (PII-free, safe to display on Maps & Feeds)
     match /public_profiles/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if true; // Publicly readable for Live Map and NGO directory
       allow create: if isOwner(userId) && isValidPublicProfile(request.resource.data);
       allow update: if isOwner(userId) && isValidPublicProfile(request.resource.data) && areImmutableFieldsUnchanged(['uid']);
       allow delete: if isOwner(userId);
@@ -192,12 +211,13 @@ service cloud.firestore {
 
     // 3. Emergency Rescue Cases
     match /rescues/{caseId} {
-      allow read: if isAuthenticated();
-      // Any verified authenticated user can report a case
-      allow create: if isAuthenticated() && isValidRescue(request.resource.data);
+      allow read: if true; // Publicly readable for Live Map and Rescue board
+      // Allow authenticated creates with their own UID, or anonymous creations (used by server/guests)
+      allow create: if isValidRescue(request.resource.data) && 
+                    ((isAuthenticated() && request.resource.data.reporterId == request.auth.uid) || 
+                     (request.resource.data.reporterId == 'anonymous'));
       // Valid state transition required: cannot change reporterId or createdAt
-      allow update: if isAuthenticated() && 
-                    isValidRescue(request.resource.data) && 
+      allow update: if isValidRescue(request.resource.data) && 
                     areImmutableFieldsUnchanged(['reporterId', 'createdAt']);
       allow delete: if false; // Rescue records are archival and cannot be deleted
     }
@@ -214,6 +234,14 @@ service cloud.firestore {
     match /cities/{cityId} {
       allow read: if true; // Map centers are publicly readable
       allow write: if false; // Lock down database modifications (Admin dashboard updates only)
+    }
+
+    // 6. Adoption Pets Collection (Publicly readable, authenticated write)
+    match /adoption_pets/{petId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidAdoptionPet(request.resource.data);
+      allow update: if isAuthenticated() && isValidAdoptionPet(request.resource.data);
+      allow delete: if isAuthenticated();
     }
   }
 }

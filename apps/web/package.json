@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "build:static": "node build-static.mjs",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",

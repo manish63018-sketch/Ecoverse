@@ -10,8 +10,11 @@ import {
 import Link from "next/link";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
+import { db } from "@/lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
 import type { LocationSelection } from "@/types/location";
 import type { EmergencyLevel } from "@/types/rescue";
+import { getApiUrl } from "@/lib/api";
 
 const LeafletMapPicker = dynamic(
   () => import("@/components/sections/MapPicker"),
@@ -100,7 +103,7 @@ export default function SOSReportPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/rescues", {
+      const res = await fetch(getApiUrl("/api/rescues"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -118,6 +121,8 @@ export default function SOSReportPage() {
             address ? `Landmark: ${address}` : "",
             phone ? `Reporter phone: ${phone}` : "",
           ].filter(Boolean).join("\n"),
+          reporter_name: user?.displayName || 'Ecoverse User',
+          reporter_phone: phone || 'Not provided',
         }),
       });
 
@@ -125,6 +130,31 @@ export default function SOSReportPage() {
 
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to submit rescue report");
+      }
+
+      // Sync to Firestore on the client side
+      try {
+        const newCase = data.case;
+        await setDoc(doc(db, "rescues", newCase.id), {
+          caseId: newCase.id,
+          reporterId: user?.uid ?? "anonymous",
+          reporterContact: {
+            name: user?.displayName || "Ecoverse User",
+            phone: phone || "Not provided",
+          },
+          animalType: animalType,
+          conditionDescription: condition || "No description provided",
+          severity: severity,
+          status: "reported",
+          location: {
+            latitude: latitude,
+            longitude: longitude,
+            addressText: newCase.display_zone || locationSelection.areaName,
+          },
+          createdAt: newCase.created_at || new Date().toISOString(),
+        });
+      } catch (fsErr) {
+        console.error("Client failed to sync new case to Firestore:", fsErr);
       }
 
       toast.success(

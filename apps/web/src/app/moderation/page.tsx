@@ -34,7 +34,7 @@ export default function ModerationPolicyPage() {
             Moderation Policy
           </h1>
           <p style={{ color: "rgba(232,245,233,0.55)", marginTop: "12px", lineHeight: 1.7 }}>
-            Last updated: June 2026 &nbsp;|&nbsp; Effective for ecoverse.in
+            Last updated: June 2026 &nbsp;|&nbsp; Effective for ecoverseindia.web.app
           </p>
           <p style={{ color: "rgba(232,245,233,0.7)", marginTop: "16px", lineHeight: 1.8 }}>
             EcoVerse is a compassionate, trust-first community. Our moderation policy exists to protect animals, our users, and the integrity of emergency rescue operations. We are firm about safety while remaining transparent and fair.
@@ -125,7 +125,7 @@ export default function ModerationPolicyPage() {
             We make mistakes. If you believe a moderation action taken against your account or content was incorrect, you may appeal by:
           </LegalParagraph>
           <LegalList items={[
-            "Emailing us at appeals@ecoverse.in with your username and a description of the decision",
+            "Emailing us at appeals@ecoverseindia.web.app with your username and a description of the decision",
             "We will review all appeals within 72 hours",
             "Appeals are reviewed by a different team member than the original moderator",
             "You will receive a written explanation of the final decision",
@@ -150,8 +150,8 @@ export default function ModerationPolicyPage() {
         <LegalSection title="8. Contact Moderation Team">
           <LegalParagraph>
             To report content, appeal a decision, or raise a concern:<br />
-            📧 <a href="mailto:moderation@ecoverse.in" style={{ color: "#66BB6A" }}>moderation@ecoverse.in</a><br />
-            Appeals: <a href="mailto:appeals@ecoverse.in" style={{ color: "#66BB6A" }}>appeals@ecoverse.in</a>
+            📧 <a href="mailto:moderation@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>moderation@ecoverseindia.web.app</a><br />
+            Appeals: <a href="mailto:appeals@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>appeals@ecoverseindia.web.app</a>
           </LegalParagraph>
         </LegalSection>
       </div>

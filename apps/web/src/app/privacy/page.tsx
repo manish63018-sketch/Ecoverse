@@ -36,7 +36,7 @@ export default function PrivacyPolicyPage() {
             Privacy Policy
           </h1>
           <p style={{ color: "rgba(232,245,233,0.55)", marginTop: "12px", lineHeight: 1.7 }}>
-            Last updated: June 2026 &nbsp;|&nbsp; Effective for ecoverse.in
+            Last updated: June 2026 &nbsp;|&nbsp; Effective for ecoverseindia.web.app
           </p>
           <p style={{ color: "rgba(232,245,233,0.7)", marginTop: "16px", lineHeight: 1.8 }}>
             EcoVerse (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, share, and safeguard your information when you use our platform. It is governed by the Indian Information Technology Act, 2000 and the Personal Data Protection Bill (PDPB), 2023.
@@ -104,7 +104,7 @@ export default function PrivacyPolicyPage() {
             "Withdraw Consent: Opt out of non-essential notifications at any time",
           ]} />
           <LegalParagraph>
-            To exercise any right, email us at <a href="mailto:privacy@ecoverse.in" style={{ color: "#66BB6A" }}>privacy@ecoverse.in</a>. We will respond within 30 days.
+            To exercise any right, email us at <a href="mailto:privacy@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>privacy@ecoverseindia.web.app</a>. We will respond within 30 days.
           </LegalParagraph>
         </LegalSection>
 
@@ -116,7 +116,7 @@ export default function PrivacyPolicyPage() {
 
         <LegalSection title="7. Children&apos;s Policy">
           <LegalParagraph>
-            EcoVerse is intended for users aged 13 and above. We do not knowingly collect personal data from children under 13. If we discover such data has been collected, we will delete it immediately. Parents/guardians may contact us at <a href="mailto:privacy@ecoverse.in" style={{ color: "#66BB6A" }}>privacy@ecoverse.in</a>.
+            EcoVerse is intended for users aged 13 and above. We do not knowingly collect personal data from children under 13. If we discover such data has been collected, we will delete it immediately. Parents/guardians may contact us at <a href="mailto:privacy@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>privacy@ecoverseindia.web.app</a>.
           </LegalParagraph>
         </LegalSection>
 
@@ -129,7 +129,7 @@ export default function PrivacyPolicyPage() {
         <LegalSection title="9. Contact">
           <LegalParagraph>
             For any privacy concerns or data requests, contact us at:<br />
-            📧 <a href="mailto:privacy@ecoverse.in" style={{ color: "#66BB6A" }}>privacy@ecoverse.in</a><br />
+            📧 <a href="mailto:privacy@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>privacy@ecoverseindia.web.app</a><br />
             This policy is governed by the laws of India (IT Act 2000, PDPB 2023).
           </LegalParagraph>
         </LegalSection>

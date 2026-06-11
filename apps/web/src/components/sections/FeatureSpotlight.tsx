@@ -6,6 +6,7 @@ import { ArrowRight, Zap, Shield, Users, Clock } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
+import { getApiUrl } from "@/lib/api";
 
 // Haversine distance calculator
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -448,7 +449,7 @@ export function FeatureSpotlight() {
         let url = "/api/landing-stats";
         if (user) {
           try {
-            const locRes = await fetch(`/api/users/location?firebase_uid=${user.uid}`);
+            const locRes = await fetch(getApiUrl(`/api/users/location?firebase_uid=${user.uid}`));
             if (locRes.ok) {
               const locData = await locRes.json();
               if (locData.profile?.city_id) {
@@ -461,7 +462,7 @@ export function FeatureSpotlight() {
             console.warn("Failed to fetch user location profile for spotlight:", locErr);
           }
         }
-        const res = await fetch(url);
+        const res = await fetch(getApiUrl(url));
         const data = await res.json();
         setStats(data);
       } catch (err) {

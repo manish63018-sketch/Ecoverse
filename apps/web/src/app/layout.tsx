@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { Toaster } from "react-hot-toast";
+import Script from "next/script";
 
 export const metadata: Metadata = {
   title: "EcoVerse — One Earth. One Community. Infinite Compassion.",
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_IN",
-    url: "https://ecoverse.in",
+    url: "https://ecoverseindia.web.app",
     siteName: "EcoVerse",
     title: "EcoVerse — One Earth. One Community. Infinite Compassion.",
     description:
@@ -59,6 +60,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="google-adsense-account" content="ca-pub-8150181705727957" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -68,6 +70,12 @@ export default function RootLayout({
         />
       </head>
       <body style={{ background: "#050f07", margin: 0 }}>
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8150181705727957"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
         <AuthProvider>
           <PixelSphere />
           <div style={{ position: "relative", zIndex: 1 }}>

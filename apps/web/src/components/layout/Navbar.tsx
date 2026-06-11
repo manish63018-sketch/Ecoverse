@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu, X, Bell, LogOut, LayoutDashboard, User as UserIcon, Settings } from "lucide-react";
 import { EcoVerseLogo } from "@/components/brand/Logo";
 import { useAuth } from "@/context/AuthContext";
@@ -14,12 +15,14 @@ const navLinks = [
   { label: "Adopt", href: "/adopt" },
   { label: "Knowledge", href: "/knowledge" },
   { label: "NGOs", href: "/ngos" },
+  { label: "💚 Donate", href: "/donate" },
 ];
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout } = useAuth();
+  const pathname = usePathname();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 30);
@@ -75,42 +78,51 @@ export function Navbar() {
             }}
             className="hidden-mobile"
           >
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "8px 16px",
-                  borderRadius: "var(--radius-full)",
-                  fontFamily: "var(--font-sans)",
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                  textDecoration: "none",
-                  color: link.highlight ? "#fff" : "rgba(232,245,233,0.85)",
-                  background: link.highlight
-                    ? "linear-gradient(135deg,#388E3C,#1B5E20)"
-                    : "transparent",
-                  transition: "all var(--transition-base)",
-                  boxShadow: link.highlight ? "0 4px 16px rgba(46,125,50,0.4)" : "none",
-                }}
-                onMouseEnter={(e) => {
-                  if (!link.highlight) {
-                    (e.target as HTMLElement).style.background = "rgba(102,187,106,0.12)";
-                    (e.target as HTMLElement).style.color = "#A5D6A7";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!link.highlight) {
-                    (e.target as HTMLElement).style.background = "transparent";
-                    (e.target as HTMLElement).style.color = "rgba(232,245,233,0.85)";
-                  }
-                }}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {navLinks.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "8px 16px",
+                    borderRadius: "var(--radius-full)",
+                    fontFamily: "var(--font-sans)",
+                    fontWeight: 600,
+                    fontSize: "0.9rem",
+                    textDecoration: "none",
+                    color: link.highlight
+                      ? "#fff"
+                      : isActive
+                      ? "#A5D6A7"
+                      : "rgba(232,245,233,0.85)",
+                    background: link.highlight
+                      ? "linear-gradient(135deg,#388E3C,#1B5E20)"
+                      : isActive
+                      ? "rgba(102,187,106,0.12)"
+                      : "transparent",
+                    transition: "all var(--transition-base)",
+                    boxShadow: link.highlight ? "0 4px 16px rgba(46,125,50,0.4)" : "none",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!link.highlight && !isActive) {
+                      (e.target as HTMLElement).style.background = "rgba(102,187,106,0.12)";
+                      (e.target as HTMLElement).style.color = "#A5D6A7";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!link.highlight && !isActive) {
+                      (e.target as HTMLElement).style.background = "transparent";
+                      (e.target as HTMLElement).style.color = "rgba(232,245,233,0.85)";
+                    }
+                  }}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
             {user && (
               <>
                 <Link
@@ -272,25 +284,36 @@ export function Navbar() {
               animation: "fade-up 0.2s ease forwards",
             }}
           >
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                style={{
-                  padding: "14px 20px",
-                  borderRadius: "var(--radius-lg)",
-                  fontWeight: 600,
-                  fontSize: "1rem",
-                  color: link.highlight ? "#66BB6A" : "rgba(232,245,233,0.85)",
-                  background: link.highlight ? "rgba(102,187,106,0.1)" : "transparent",
-                  textDecoration: "none",
-                  transition: "all var(--transition-fast)",
-                }}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {navLinks.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileOpen(false)}
+                  style={{
+                    padding: "14px 20px",
+                    borderRadius: "var(--radius-lg)",
+                    fontWeight: 600,
+                    fontSize: "1rem",
+                    color: link.highlight
+                      ? "#66BB6A"
+                      : isActive
+                      ? "#A5D6A7"
+                      : "rgba(232,245,233,0.85)",
+                    background: link.highlight
+                      ? "rgba(102,187,106,0.1)"
+                      : isActive
+                      ? "rgba(102,187,106,0.08)"
+                      : "transparent",
+                    textDecoration: "none",
+                    transition: "all var(--transition-fast)",
+                  }}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
             {user && (
               <>
                 <Link

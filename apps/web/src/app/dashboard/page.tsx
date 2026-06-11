@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import toast from "react-hot-toast";
 import type { RescueCase } from "@/types/rescue";
+import { getApiUrl } from "@/lib/api";
 
 interface UserProfile {
   displayName: string;
@@ -81,7 +82,7 @@ export default function DashboardPage() {
     // Load location profile from Postgres
     const fetchUserLocation = async () => {
       try {
-        const res = await fetch(`/api/users/location?firebase_uid=${user.uid}`);
+        const res = await fetch(getApiUrl(`/api/users/location?firebase_uid=${user.uid}`));
         if (res.ok) {
           const data = await res.json();
           const locProfile = data.profile;
@@ -123,7 +124,7 @@ export default function DashboardPage() {
         url += `?firebase_uid=${user.uid}`;
       }
 
-      const res = await fetch(url);
+      const res = await fetch(getApiUrl(url));
       const data = await res.json();
       setRescues(data.cases ?? []);
     } catch (err) {
@@ -228,13 +229,24 @@ export default function DashboardPage() {
 
   const handleAcceptDispatch = async (caseId: string) => {
     try {
-      const res = await fetch(`/api/rescues/${caseId}/respond`, {
+      const res = await fetch(getApiUrl(`/api/rescues/${caseId}/respond`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ volunteer_id: user.uid, response: "accepted" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to accept");
+
+      // Sync to Firestore
+      try {
+        await updateDoc(doc(db, "rescues", caseId), {
+          status: "dispatched",
+          assignedVolunteerId: user.uid
+        });
+      } catch (fsErr) {
+        console.error("Failed to sync volunteer assignment to Firestore:", fsErr);
+      }
+
       toast.success("✅ Rescue case accepted! You are now dispatched.");
       fetchRescues();
     } catch (error: any) {
@@ -245,13 +257,23 @@ export default function DashboardPage() {
 
   const handleResolveCase = async (caseId: string) => {
     try {
-      const res = await fetch(`/api/rescues/${caseId}`, {
+      const res = await fetch(getApiUrl(`/api/rescues/${caseId}`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "resolved" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to resolve");
+
+      // Sync to Firestore
+      try {
+        await updateDoc(doc(db, "rescues", caseId), {
+          status: "resolved"
+        });
+      } catch (fsErr) {
+        console.error("Failed to sync resolution status to Firestore:", fsErr);
+      }
+
       toast.success("Rescue marked as completed! Awarded 🏅 Rescue Badge.");
       fetchRescues();
     } catch (error: any) {

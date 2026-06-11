@@ -1,11 +1,10 @@
-"use client";
-
 import React, { useEffect, useState, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { INDIAN_CITIES } from "@/lib/cities";
+import { useAuth } from "@/context/AuthContext";
 
 interface MapElement {
   id: string;
@@ -18,6 +17,7 @@ interface MapElement {
 }
 
 export default function LiveMap() {
+  const { user } = useAuth();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   
@@ -29,30 +29,37 @@ export default function LiveMap() {
   // Keep track of active layers/markers to clear them on updates
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
 
-  // Subscribe to Firestore collections in real-time
+  // Subscribe to Firestore collections in real-time or fall back to mock data
   useEffect(() => {
+
     // 1. Listen to Available Volunteers
     const qVolunteers = query(
       collection(db, "public_profiles"),
       where("roles", "array-contains", "volunteer")
     );
-    const unsubVolunteers = onSnapshot(qVolunteers, (snapshot) => {
-      const list: MapElement[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.volunteerInfo?.availableNow && data.volunteerInfo?.currentLocation) {
-          list.push({
-            id: doc.id,
-            type: "volunteer",
-            lat: data.volunteerInfo.currentLocation.latitude,
-            lng: data.volunteerInfo.currentLocation.longitude,
-            label: data.displayName || "Anonymous Volunteer",
-            details: `Skills: ${data.volunteerInfo.skills?.join(", ") || "None"}`
-          });
-        }
-      });
-      setVolunteers(list);
-    });
+    const unsubVolunteers = onSnapshot(
+      qVolunteers,
+      (snapshot) => {
+        const list: MapElement[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.volunteerInfo?.availableNow && data.volunteerInfo?.currentLocation) {
+            list.push({
+              id: doc.id,
+              type: "volunteer",
+              lat: data.volunteerInfo.currentLocation.latitude,
+              lng: data.volunteerInfo.currentLocation.longitude,
+              label: data.displayName || "Anonymous Volunteer",
+              details: `Skills: ${data.volunteerInfo.skills?.join(", ") || "None"}`
+            });
+          }
+        });
+        setVolunteers(list);
+      },
+      (error) => {
+        console.warn("Failed to listen to volunteers:", error);
+      }
+    );
 
     // 2. Listen to NGO partners
     const qNgos = query(
@@ -60,58 +67,70 @@ export default function LiveMap() {
       where("roles", "array-contains", "ngo")
     );
 
-    const unsubNgos = onSnapshot(qNgos, (snapshot) => {
-      const list: MapElement[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.ngoInfo) {
-          list.push({
-            id: doc.id,
-            type: "ngo",
-            lat: data.volunteerInfo?.currentLocation?.latitude || 17.4421, // fallback to Hyderabad center
-            lng: data.volunteerInfo?.currentLocation?.longitude || 78.3812,
-            label: data.ngoInfo.orgName || "Partner NGO",
-            details: `Cause: ${data.ngoInfo.causeType || "Stray welfare"}`
-          });
-        }
-      });
-      setNgos(list);
-    });
+    const unsubNgos = onSnapshot(
+      qNgos,
+      (snapshot) => {
+        const list: MapElement[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.ngoInfo) {
+            list.push({
+              id: doc.id,
+              type: "ngo",
+              lat: data.volunteerInfo?.currentLocation?.latitude || 17.4421, // fallback to Hyderabad center
+              lng: data.volunteerInfo?.currentLocation?.longitude || 78.3812,
+              label: data.ngoInfo.orgName || "Partner NGO",
+              details: `Cause: ${data.ngoInfo.causeType || "Stray welfare"}`
+            });
+          }
+        });
+        setNgos(list);
+      },
+      (error) => {
+        console.warn("Failed to listen to NGOs:", error);
+      }
+    );
 
     // 3. Listen to Open Rescues
     const qRescues = query(
       collection(db, "rescues"),
       where("status", "in", ["reported", "dispatched", "in_progress"])
     );
-    const unsubRescues = onSnapshot(qRescues, (snapshot) => {
-      const list: MapElement[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.location) {
-          // Add a random jitter offset (+/- 0.003 degrees, about ~300 meters) for reporter privacy
-          const jitterLat = (Math.random() - 0.5) * 0.006;
-          const jitterLng = (Math.random() - 0.5) * 0.006;
-          
-          list.push({
-            id: doc.id,
-            type: "rescue",
-            lat: data.location.latitude + jitterLat,
-            lng: data.location.longitude + jitterLng,
-            label: `SOS: ${data.animalType.toUpperCase()}`,
-            details: data.conditionDescription,
-            severity: data.severity
-          });
-        }
-      });
-      setRescues(list);
-    });
+    const unsubRescues = onSnapshot(
+      qRescues,
+      (snapshot) => {
+        const list: MapElement[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.location) {
+            // Add a random jitter offset (+/- 0.003 degrees, about ~300 meters) for reporter privacy
+            const jitterLat = (Math.random() - 0.5) * 0.006;
+            const jitterLng = (Math.random() - 0.5) * 0.006;
+            
+            list.push({
+              id: doc.id,
+              type: "rescue",
+              lat: data.location.latitude + jitterLat,
+              lng: data.location.longitude + jitterLng,
+              label: `SOS: ${data.animalType.toUpperCase()}`,
+              details: data.conditionDescription,
+              severity: data.severity
+            });
+          }
+        });
+        setRescues(list);
+      },
+      (error) => {
+        console.warn("Failed to listen to rescues:", error);
+      }
+    );
 
     return () => {
       unsubVolunteers();
       unsubNgos();
       unsubRescues();
     };
-  }, []);
+  }, [user]);
 
   // Initialize Leaflet Map
   useEffect(() => {
