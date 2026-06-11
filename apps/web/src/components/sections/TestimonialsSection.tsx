@@ -77,6 +77,7 @@ export function TestimonialsSection() {
         </div>
 
         <div
+          className="testimonials-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
@@ -86,6 +87,7 @@ export function TestimonialsSection() {
           {testimonials.map((t, i) => (
             <div
               key={t.name}
+              className="testimonial-card"
               style={{
                 background: "rgba(26, 46, 27, 0.65)",
                 backdropFilter: "blur(12px)",
@@ -164,6 +166,26 @@ export function TestimonialsSection() {
           ))}
         </div>
       </div>
+
+      <style>{`
+        .testimonials-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        @media (max-width: 768px) {
+          .testimonials-grid {
+            grid-template-columns: 1fr !important;
+            gap: 14px !important;
+          }
+          .testimonial-card {
+            padding: 20px 16px !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .testimonials-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+      `}</style>
     </section>
   );
 }

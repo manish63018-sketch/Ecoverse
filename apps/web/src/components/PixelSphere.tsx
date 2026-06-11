@@ -38,6 +38,7 @@ export default function PixelSphere() {
   
   // Animation refs to avoid re-running useEffect on state changes
   const dotsRef = useRef<Dot[]>([]);
+  const connectionsRef = useRef<[number, number][]>([]);
   const ambientParticlesRef = useRef<Particle[]>([]);
   const lastTimeRef = useRef<number>(0);
   const sparkleTimerRef = useRef<number>(0);
@@ -123,6 +124,33 @@ export default function PixelSphere() {
     ambientParticlesRef.current = particles;
   }, []);
 
+  // ── 2.5. Initialize Connections ──────────────────────────────
+  const initConnections = useCallback((dots: Dot[]) => {
+    const connections: [number, number][] = [];
+    for (let i = 0; i < dots.length; i++) {
+      const d1 = dots[i];
+      const candidates: { idx: number; dist: number }[] = [];
+      for (let j = 0; j < dots.length; j++) {
+        if (i === j) continue;
+        const d2 = dots[j];
+        const dx = d1.ux - d2.ux;
+        const dy = d1.uy - d2.uy;
+        const dz = d1.uz - d2.uz;
+        const dist = dx * dx + dy * dy + dz * dz;
+        candidates.push({ idx: j, dist });
+      }
+      candidates.sort((a, b) => a.dist - b.dist);
+      // Connect to closest 2 neighbors
+      for (let k = 0; k < 2; k++) {
+        const neighborIdx = candidates[k].idx;
+        if (i < neighborIdx) {
+          connections.push([i, neighborIdx]);
+        }
+      }
+    }
+    connectionsRef.current = connections;
+  }, []);
+
   // ── 3. Handle Responsive Resize ─────────────────────────────
   const handleResize = useCallback(() => {
     const canvas = canvasRef.current;
@@ -134,7 +162,7 @@ export default function PixelSphere() {
     canvas.height = H;
 
     const isMobile = W < 768;
-    const radius = isMobile ? 170 : Math.min(W, H) * 0.38;
+    const radius = isMobile ? 195 : Math.min(W, H) * 0.44;
 
     centerXRef.current = isMobile ? W * 0.5 : W * 0.66;
     centerYRef.current = isMobile ? H * 0.60 : H * 0.46;
@@ -145,6 +173,7 @@ export default function PixelSphere() {
     // Re-scale or re-init dots
     if (dotsRef.current.length !== totalDots) {
       initDots(totalDots, radius);
+      initConnections(dotsRef.current);
     } else {
       // Re-scale existing dots without losing animated states
       dotsRef.current.forEach(dot => {
@@ -158,7 +187,7 @@ export default function PixelSphere() {
     if (ambientParticlesRef.current.length === 0) {
       initAmbientParticles(W, H);
     }
-  }, [initDots, initAmbientParticles]);
+  }, [initDots, initAmbientParticles, initConnections]);
 
   // ── 4. Main Event Listeners for Interaction ──────────────────
   useEffect(() => {
@@ -368,7 +397,6 @@ export default function PixelSphere() {
       });
 
       // ── E. Depth Sort (Painter's Algorithm: back to front) ─
-      // Large rotatedZ is far away (drawn first), small rotatedZ is closer (drawn last)
       const sortedDots = [...dotsRef.current].sort((a, b) => b.rotatedZ - a.rotatedZ);
 
       // ── F. Render Dots ─────────────────────────────────────
@@ -390,71 +418,57 @@ export default function PixelSphere() {
         else if (depth > 0.45) color = '#66BB6A'; // leaf green mid
         else if (depth > 0.2) color = '#2E7D32'; // deep green
 
-        let dotOpacity = finalOpacity;
-        let dotColor = color;
-        let shadowBlur = 0;
+        const dotOpacity = finalOpacity;
+        const dotColor = color;
 
-        // Sparkle overrides
-        if (dot.sparkleActive) {
-          dotColor = '#a5d6a7';
-          dotOpacity = finalOpacity + (1.0 - finalOpacity) * dot.sparkleVal;
-          shadowBlur = 14 * dot.sparkleVal;
-        } else if (depth > 0.7 && dState > 0.7) {
-          shadowBlur = scale * 6; // soft standard glow for front facing dots
-        }
-
+        // Draw standard dot
         ctx.beginPath();
         ctx.arc(dot.screenX, dot.screenY, finalRadius, 0, Math.PI * 2);
-        
-        ctx.shadowColor = '#66BB6A';
-        ctx.shadowBlur = shadowBlur;
         ctx.fillStyle = dotColor;
         ctx.globalAlpha = Math.max(0, Math.min(1, dotOpacity));
         ctx.fill();
+
+        // Draw soft glow effect using concentric transparent circles instead of slow canvas shadowBlur
+        if (dot.sparkleActive) {
+          ctx.beginPath();
+          ctx.arc(dot.screenX, dot.screenY, finalRadius * 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#a5d6a7';
+          ctx.globalAlpha = Math.max(0, Math.min(1, dotOpacity * 0.35 * dot.sparkleVal));
+          ctx.fill();
+        } else if (depth > 0.7 && dState > 0.7) {
+          ctx.beginPath();
+          ctx.arc(dot.screenX, dot.screenY, finalRadius * 2, 0, Math.PI * 2);
+          ctx.fillStyle = dotColor;
+          ctx.globalAlpha = Math.max(0, Math.min(1, dotOpacity * 0.15));
+          ctx.fill();
+        }
       });
 
-      // Reset shadows and alpha for lines
-      ctx.shadowBlur = 0;
+      // Reset global alpha for lines
       ctx.globalAlpha = 1.0;
 
       // ── G. Draw Mesh Connecting Lines (Desktop only) ───────
-      if (!isMobile) {
-        for (let i = 0; i < sortedDots.length; i++) {
-          const d1 = sortedDots[i];
-          if (d1.dissolveState < 0.3) continue;
+      if (!isMobile && connectionsRef.current.length > 0) {
+        connectionsRef.current.forEach(([i, j]) => {
+          const d1 = dotsRef.current[i];
+          const d2 = dotsRef.current[j];
+          if (!d1 || !d2) return;
+          if (d1.dissolveState < 0.3 || d2.dissolveState < 0.3) return;
 
-          // Find nearby neighbors in screen distance
-          const neighbors: { dot: Dot; dist: number }[] = [];
-          for (let j = i + 1; j < sortedDots.length; j++) {
-            const d2 = sortedDots[j];
-            if (d2.dissolveState < 0.3) continue;
+          const dx = d1.screenX - d2.screenX;
+          const dy = d1.screenY - d2.screenY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
 
-            const dx = d1.screenX - d2.screenX;
-            const dy = d1.screenY - d2.screenY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < 38) {
-              neighbors.push({ dot: d2, dist });
-            }
-          }
-
-          // Limit to closest 3 connections
-          neighbors.sort((a, b) => a.dist - b.dist);
-          const limit = Math.min(neighbors.length, 3);
-
-          for (let k = 0; k < limit; k++) {
-            const n = neighbors[k];
-            // Line opacity based on distance, start dot dissolve & depth
-            const lineOpacity = 0.08 * (1 - n.dist / 38) * d1.dissolveState * d1.depthFactor;
-            
+          if (dist < 45) {
+            const lineOpacity = 0.08 * (1 - dist / 45) * d1.dissolveState * d2.dissolveState * d1.depthFactor;
             ctx.strokeStyle = `rgba(46, 125, 50, ${lineOpacity})`;
             ctx.lineWidth = 0.5;
             ctx.beginPath();
             ctx.moveTo(d1.screenX, d1.screenY);
-            ctx.lineTo(n.dot.screenX, n.dot.screenY);
+            ctx.lineTo(d2.screenX, d2.screenY);
             ctx.stroke();
           }
-        }
+        });
       }
 
       // ── H. Draw Floating Ambient Particles ─────────────────

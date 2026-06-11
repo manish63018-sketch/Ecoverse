@@ -87,6 +87,7 @@ export function CommunityCTA() {
       <div className="container" style={{ textAlign: "center" }}>
         {/* Badge */}
         <div
+          className="early-member-badge"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -154,6 +155,7 @@ export function CommunityCTA() {
           {roles.map((role) => (
             <div
               key={role.label}
+              className="role-pill"
               style={{
                 display: "inline-flex",
                 alignItems: "center",

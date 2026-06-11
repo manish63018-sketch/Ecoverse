@@ -131,6 +131,7 @@ function SOSCard({ card, position }: { card: any; position: any }) {
 
   return (
     <div
+      className="sos-card"
       style={{
         position: "absolute",
         ...position,
@@ -209,6 +210,7 @@ function SOSVisual({ stats, loading }: { stats: any; loading: boolean }) {
 
   return (
     <div
+      className="sos-visual-container"
       style={{
         width: "100%",
         height: "280px",
@@ -236,6 +238,7 @@ function SOSVisual({ stats, loading }: { stats: any; loading: boolean }) {
 
       {/* Center SOS button */}
       <div
+        className="sos-center-btn"
         style={{
           width: "80px",
           height: "80px",
@@ -385,6 +388,7 @@ function MapVisual({ stats, loading }: { stats: any; loading: boolean }) {
 
   return (
     <div
+      className="map-visual-container"
       style={{
         width: "100%",
         height: "280px",
@@ -616,9 +620,29 @@ export function FeatureSpotlight() {
           grid-template-columns: 1fr 1fr;
         }
         @media (max-width: 768px) {
+          #features {
+            padding: 48px 0px !important;
+          }
           .feature-grid {
             grid-template-columns: 1fr !important;
-            padding: 28px !important;
+            padding: 20px 16px !important;
+          }
+          .feature-grid > div:first-child,
+          .feature-grid > div:last-child {
+            order: unset !important;
+          }
+          /* Visual panel: always appears below content on mobile */
+          .feature-grid > div[style*="order: 2"],
+          .feature-grid > div[style*="order: 1"] {
+            order: 2 !important;
+          }
+          .sos-visual-container,
+          .feature-grid [style*="height: \"280px\""] {
+            height: 170px !important;
+          }
+          /* Scale pulsing rings down */
+          .sos-visual-container > div[style*="border-radius: \"50%\""] {
+            transform: scale(0.7);
           }
         }
       `}</style>

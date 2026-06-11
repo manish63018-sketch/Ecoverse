@@ -124,8 +124,8 @@ export function HeroSection() {
           style={{
             fontFamily:    "var(--font-sans)",
             fontWeight:    900,
-            fontSize:      "clamp(3rem, 5.5vw, 6rem)",
-            lineHeight:    0.98,
+            fontSize:      "clamp(2rem, 5.5vw, 6rem)",
+            lineHeight:    1.0,
             letterSpacing: "-0.04em",
             color:         "#E8F5E9",
             marginBottom:  "22px",
@@ -133,10 +133,10 @@ export function HeroSection() {
             textShadow:    "0 2px 40px rgba(0,0,0,0.8)",
           }}
         >
-          One Earth.
-          <br />
+          <span style={{ display: "block" }}>One Earth.</span>
           <span
             style={{
+              display:              "block",
               background:           "linear-gradient(120deg, #A5D6A7 0%, #66BB6A 50%, #2E7D32 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor:  "transparent",
@@ -145,8 +145,7 @@ export function HeroSection() {
           >
             One Community.
           </span>
-          <br />
-          <span style={{ fontSize: "0.62em", fontWeight: 700, color: "rgba(232,245,233,0.7)" }}>
+          <span style={{ display: "block", fontSize: "0.62em", fontWeight: 700, color: "rgba(232,245,233,0.7)" }}>
             Infinite Compassion.
           </span>
         </h1>
@@ -247,7 +246,7 @@ export function HeroSection() {
         }
         @media (max-width: 768px) {
           .hero-content {
-            padding: 90px 16px 50px !important;
+            padding: 90px 16px 60px !important;
             max-width: 100% !important;
             width: 100% !important;
           }
@@ -256,14 +255,16 @@ export function HeroSection() {
             height: 44px !important;
           }
           .hero-title {
-            font-size: 2.1rem !important;
-            line-height: 1.05 !important;
-            margin-bottom: 14px !important;
+            font-size: 2.2rem !important;
+            line-height: 1.06 !important;
+            margin-bottom: 16px !important;
+            letter-spacing: -0.035em !important;
           }
           .hero-desc {
-            font-size: 0.875rem !important;
-            line-height: 1.6 !important;
+            font-size: 0.9rem !important;
+            line-height: 1.65 !important;
             margin-bottom: 28px !important;
+            max-width: 100% !important;
           }
           .hero-actions {
             flex-direction: column !important;
@@ -273,27 +274,36 @@ export function HeroSection() {
           .hero-actions .btn {
             width: 100% !important;
             justify-content: center !important;
-            padding: 11px 20px !important;
-            font-size: 0.9rem !important;
+            padding: 14px 20px !important;
+            font-size: 0.9375rem !important;
+            min-height: 52px !important;
           }
           .hero-drag-hint {
             display: none !important;
           }
           .hero-badge {
-            padding: 6px 14px !important;
-            margin-bottom: 18px !important;
+            padding: 7px 14px !important;
+            margin-bottom: 20px !important;
           }
           .hero-badge span:last-of-type {
-            font-size: 0.7rem !important;
-            letter-spacing: 0.02em !important;
+            font-size: 0.72rem !important;
+            letter-spacing: 0.03em !important;
           }
           .hero-tags {
-            gap: 16px 20px !important;
-            margin-top: 26px !important;
+            gap: 12px 16px !important;
+            margin-top: 28px !important;
             justify-content: flex-start !important;
           }
           .hero-tags > div {
-            flex: 0 0 calc(50% - 10px) !important;
+            flex: 0 0 calc(50% - 8px) !important;
+          }
+        }
+        @media (max-width: 400px) {
+          .hero-title {
+            font-size: 1.9rem !important;
+          }
+          .hero-tags > div {
+            flex: 0 0 100% !important;
           }
         }
       `}</style>

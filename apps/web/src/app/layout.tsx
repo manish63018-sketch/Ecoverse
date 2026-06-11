@@ -51,6 +51,7 @@ export const metadata: Metadata = {
 };
 
 import PixelSphere from "@/components/PixelSphere";
+import { LiveJoinNotification } from "@/components/sections/LiveJoinNotification";
 
 export default function RootLayout({
   children,
@@ -69,7 +70,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body style={{ background: "#050f07", margin: 0 }}>
+      <body style={{ background: "#050f07", margin: 0 }} suppressHydrationWarning>
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8150181705727957"
@@ -78,6 +79,7 @@ export default function RootLayout({
         />
         <AuthProvider>
           <PixelSphere />
+          <LiveJoinNotification />
           <div style={{ position: "relative", zIndex: 1 }}>
             {children}
           </div>

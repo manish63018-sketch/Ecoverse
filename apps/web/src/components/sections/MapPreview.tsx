@@ -154,6 +154,7 @@ export function MapPreview() {
 
           {/* Map visual */}
           <div
+            className="map-preview-visual"
             style={{
               position: "relative",
               background: "rgba(15,26,16,0.6)",

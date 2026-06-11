@@ -141,6 +141,7 @@ export default function EarthGlobe() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef  = useRef({
     dots:      [] as GlobeDot[],
+    connections: [] as Array<[number, number]>,
     rotY:      0,
     rotX:      0.18,           // slight axial tilt (like real Earth ~23°)
     dragX:     0,
@@ -156,7 +157,34 @@ export default function EarthGlobe() {
 
   // Build dots once on mount
   useEffect(() => {
-    stateRef.current.dots = buildGlobeDots(1200);
+    const dots = buildGlobeDots(1200);
+
+    // Precompute connections on unit sphere to eliminate O(N^2) checks in render loop
+    const connections: Array<[number, number]> = [];
+    for (let i = 0; i < dots.length; i++) {
+      const d1 = dots[i];
+      const candidates: { idx: number; dist: number }[] = [];
+      for (let j = 0; j < dots.length; j++) {
+        if (i === j) continue;
+        const d2 = dots[j];
+        const dx = d1.x - d2.x;
+        const dy = d1.y - d2.y;
+        const dz = d1.z - d2.z;
+        const dist = dx * dx + dy * dy + dz * dz;
+        candidates.push({ idx: j, dist });
+      }
+      candidates.sort((a, b) => a.dist - b.dist);
+      // Connect to closest 2 neighbors if they are close enough on the unit sphere
+      for (let k = 0; k < Math.min(candidates.length, 2); k++) {
+        const neighbor = candidates[k];
+        if (neighbor.dist < 0.03 && i < neighbor.idx) {
+          connections.push([i, neighbor.idx]);
+        }
+      }
+    }
+
+    stateRef.current.dots = dots;
+    stateRef.current.connections = connections;
   }, []);
 
   // ─── Main draw loop ─────────────────────────────────────────────────────────
@@ -180,7 +208,7 @@ export default function EarthGlobe() {
 
     // ── Globe params ──
     const isMobile = W < 768;
-    const R      = isMobile ? Math.min(W, H) * 0.22 : Math.min(W, H) * 0.35;
+    const R      = isMobile ? Math.min(W, H) * 0.28 : Math.min(W, H) * 0.41;
     const cx     = isMobile ? W * 0.5 : W * 0.74;
     const cy     = isMobile ? H * 0.77 : H * 0.48;
     const fov    = 2.8;                       // perspective strength
@@ -301,38 +329,24 @@ export default function EarthGlobe() {
     projected.sort((a, b) => a.depth - b.depth);
 
     // ── Draw Mesh Connecting Lines (Neural-net tech mesh instead of lat/lon grids) ──
-    if (!isMobile) {
+    if (!isMobile && s.connections.length > 0) {
       ctx.save();
-      for (let i = 0; i < projected.length; i++) {
+      for (const [i, j] of s.connections) {
         const p1 = projected[i];
-        if (!p1.visible || p1.depth < 0.45) continue;
+        const p2 = projected[j];
+        if (!p1 || !p2 || !p1.visible || !p2.visible || p1.depth < 0.45 || p2.depth < 0.45) continue;
 
-        const neighbors: { p: Projected; dist: number }[] = [];
-        for (let j = i + 1; j < projected.length; j++) {
-          const p2 = projected[j];
-          if (!p2.visible || p2.depth < 0.45) continue;
+        const dx = p1.sx - p2.sx;
+        const dy = p1.sy - p2.sy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-          const dx = p1.sx - p2.sx;
-          const dy = p1.sy - p2.sy;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < 32) {
-            neighbors.push({ p: p2, dist });
-          }
-        }
-
-        // Limit to closest 2 neighbors to match clean look
-        neighbors.sort((a, b) => a.dist - b.dist);
-        const limit = Math.min(neighbors.length, 2);
-
-        for (let k = 0; k < limit; k++) {
-          const n = neighbors[k];
-          const lineOpacity = 0.12 * (1 - n.dist / 32) * p1.depth;
+        if (dist < 32) {
+          const lineOpacity = 0.12 * (1 - dist / 32) * p1.depth;
           ctx.strokeStyle = `rgba(102, 187, 106, ${lineOpacity})`;
           ctx.lineWidth = 0.5;
           ctx.beginPath();
           ctx.moveTo(p1.sx, p1.sy);
-          ctx.lineTo(n.p.sx, n.p.sy);
+          ctx.lineTo(p2.sx, p2.sy);
           ctx.stroke();
         }
       }
@@ -362,30 +376,32 @@ export default function EarthGlobe() {
       else if (depth > 0.45) color = '#66BB6A'; // leaf green mid
       else if (depth > 0.2) color = '#2E7D32'; // deep green
 
-      let dotOpacity = 0.15 + depth * 0.75;
-      let shadowBlur = 0;
+      const dotOpacity = 0.15 + depth * 0.75;
 
-      // Sparkle triggers matching PixelSphere
-      if (dot.sparkleActive && dot.sparkleVal !== undefined) {
-        color = '#a5d6a7';
-        dotOpacity = dotOpacity + (1.0 - dotOpacity) * dot.sparkleVal;
-        shadowBlur = 14 * dot.sparkleVal;
-      } else if (depth > 0.7) {
-        shadowBlur = scale * 5; // soft standard glow for front facing dots
-      }
-
+      // Draw standard dot
       ctx.beginPath();
       ctx.arc(p.sx, p.sy, finalRadius, 0, Math.PI * 2);
-      
-      ctx.shadowColor = '#66BB6A';
-      ctx.shadowBlur = shadowBlur;
       ctx.fillStyle = color;
       ctx.globalAlpha = Math.max(0, Math.min(1, dotOpacity));
       ctx.fill();
+
+      // Draw soft glow effect using concentric transparent circles instead of slow canvas shadowBlur
+      if (dot.sparkleActive && dot.sparkleVal !== undefined) {
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, finalRadius * 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#a5d6a7';
+        ctx.globalAlpha = Math.max(0, Math.min(1, dotOpacity * 0.35 * dot.sparkleVal));
+        ctx.fill();
+      } else if (depth > 0.7) {
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, finalRadius * 2, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = Math.max(0, Math.min(1, dotOpacity * 0.15));
+        ctx.fill();
+      }
     }
 
-    // Reset shadow blur and global alpha
-    ctx.shadowBlur = 0;
+    // Reset global alpha
     ctx.globalAlpha = 1.0;
 
     // ── Specular highlight (white sheen top-left) ──

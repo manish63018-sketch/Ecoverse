@@ -14,7 +14,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { getApiUrl } from "@/lib/api";
 import { db } from "@/lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 
 const SEVERITY_COLORS: Record<string, { bg: string; text: string }> = {
   critical: { bg: "rgba(239,83,80,0.15)",   text: "#EF5350" },
@@ -59,6 +59,53 @@ export default function RescuePage() {
   const [searchTerm, setSearchTerm]     = useState("");
   const [animalFilter, setAnimalFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
+
+  // Cache of volunteer profiles for assigned cases
+  const [volunteerProfiles, setVolunteerProfiles] = useState<Record<string, { name: string; isActive: boolean }>>({});
+  // Track which case is currently being accepted (to disable button)
+  const [submittingCaseId, setSubmittingCaseId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const idsToFetch = Array.from(new Set(
+      cases
+        .map(c => c.assigned_volunteer_id)
+        .filter((id): id is string => !!id)
+    ));
+
+    if (idsToFetch.length === 0) return;
+
+    const fetchVolunteerProfiles = async () => {
+      const profiles = { ...volunteerProfiles };
+      let updated = false;
+
+      for (const id of idsToFetch) {
+        if (profiles[id]) continue;
+        try {
+          const docRef = doc(db, "public_profiles", id);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            profiles[id] = {
+              name: data.displayName || "Ecoverse Volunteer",
+              isActive: data.volunteerInfo?.availableNow ?? data.availableNow ?? true
+            };
+            updated = true;
+          } else {
+            profiles[id] = { name: "Ecoverse Volunteer", isActive: false };
+            updated = true;
+          }
+        } catch (err) {
+          console.warn("Error fetching volunteer profile:", id, err);
+        }
+      }
+
+      if (updated) {
+        setVolunteerProfiles(profiles);
+      }
+    };
+
+    fetchVolunteerProfiles();
+  }, [cases]);
 
   // ── Load user's location profile ─────────────────────────────
   useEffect(() => {
@@ -138,6 +185,8 @@ export default function RescuePage() {
 
   const handleAcceptDispatch = async (caseId: string) => {
     if (!user) return toast.error("Please login to accept dispatches");
+    if (submittingCaseId) return; // prevent double-submit
+    setSubmittingCaseId(caseId);
     try {
       const res = await fetch(getApiUrl(`/api/rescues/${caseId}/respond`), {
         method: "POST",
@@ -147,10 +196,19 @@ export default function RescuePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to accept");
 
+      // Optimistically update local case status so UI reflects change immediately
+      setCases(prev =>
+        prev.map(c =>
+          c.id === caseId
+            ? { ...c, status: "assigned" as any, assigned_volunteer_id: user.uid }
+            : c
+        )
+      );
+
       // Sync to Firestore
       try {
         await updateDoc(doc(db, "rescues", caseId), {
-          status: "dispatched",
+          status: "assigned",
           assignedVolunteerId: user.uid
         });
       } catch (fsErr) {
@@ -158,9 +216,11 @@ export default function RescuePage() {
       }
 
       toast.success("✅ Rescue case accepted! You are now assigned.");
-      fetchCases();
+      fetchCases(); // refresh from server for full consistency
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to accept rescue case");
+    } finally {
+      setSubmittingCaseId(null);
     }
   };
 
@@ -523,24 +583,60 @@ export default function RescuePage() {
                             <CheckCircle size={14} /> You are assigned
                           </div>
                         ) : rescue.status === "in_progress" || rescue.status === "assigned" ? (
-                          <span style={{ fontSize: "0.78rem", color: "rgba(232,245,233,0.35)", fontWeight: 600 }}>
-                            🔒 Volunteer Dispatched
-                          </span>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                            <span style={{ fontSize: "0.78rem", color: "rgba(232,245,233,0.45)", fontWeight: 600 }}>
+                              Assigned to: <strong style={{ color: "#E8F5E9" }}>{volunteerProfiles[rescue.assigned_volunteer_id ?? ""]?.name || "EcoVerse Rescuer"}</strong>
+                            </span>
+                            {volunteerProfiles[rescue.assigned_volunteer_id ?? ""] && (
+                              <span style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                background: volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "rgba(102,187,106,0.12)" : "rgba(255,255,255,0.05)",
+                                border: `1px solid ${volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "rgba(102,187,106,0.3)" : "rgba(255,255,255,0.15)"}`,
+                                color: volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "#66BB6A" : "rgba(232, 245, 233, 0.5)",
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                fontSize: "0.625rem",
+                                fontWeight: 700,
+                              }}>
+                                <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "#66BB6A" : "rgba(232,245,233,0.4)", display: "inline-block" }} />
+                                {volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "Active Now" : "Standby"}
+                              </span>
+                            )}
+                          </div>
                         ) : isOpen ? (
                           <button
                             onClick={() => handleAcceptDispatch(rescue.id)}
+                            disabled={!user || submittingCaseId === rescue.id}
                             style={{
-                              background: !user ? "rgba(255,255,255,0.06)" : "rgba(102,187,106,0.12)",
-                              border: !user ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(102,187,106,0.25)",
-                              color: !user ? "rgba(255,255,255,0.5)" : "#A5D6A7",
+                              background: !user
+                                ? "rgba(255,255,255,0.06)"
+                                : submittingCaseId === rescue.id
+                                ? "rgba(102,187,106,0.08)"
+                                : "rgba(102,187,106,0.12)",
+                              border: !user
+                                ? "1px solid rgba(255,255,255,0.15)"
+                                : "1px solid rgba(102,187,106,0.25)",
+                              color: !user
+                                ? "rgba(255,255,255,0.5)"
+                                : submittingCaseId === rescue.id
+                                ? "rgba(165,214,167,0.5)"
+                                : "#A5D6A7",
                               padding: "8px 18px",
                               borderRadius: "9px", fontWeight: 600,
-                              cursor: "pointer", fontSize: "0.82rem",
+                              cursor: !user || submittingCaseId === rescue.id ? "not-allowed" : "pointer",
+                              fontSize: "0.82rem",
                               fontFamily: "var(--font-sans)", transition: "all 0.15s",
+                              opacity: submittingCaseId === rescue.id ? 0.7 : 1,
                             }}
                             className="accept-btn"
                           >
-                            {!user ? "🔒 Login to Accept" : "Accept Dispatch"}
+                            {!user
+                              ? "🔒 Login to Accept"
+                              : submittingCaseId === rescue.id
+                              ? "Accepting..."
+                              : "Accept Dispatch"}
                           </button>
                         ) : null}
                       </div>

@@ -119,7 +119,7 @@ export function Footer() {
               >
                 {title}
               </h4>
-              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "4px" }}>
                 {links.map((link) => (
                   <li key={link.href}>
                     <Link
@@ -129,6 +129,10 @@ export function Footer() {
                         textDecoration: "none",
                         fontSize: "0.9rem",
                         transition: "color var(--transition-fast)",
+                        display: "flex",
+                        alignItems: "center",
+                        minHeight: "40px",
+                        padding: "4px 0",
                       }}
                       onMouseEnter={(e) => (e.target as HTMLElement).style.color = "#A5D6A7"}
                       onMouseLeave={(e) => (e.target as HTMLElement).style.color = "var(--color-text-muted-dark)"}
@@ -147,6 +151,7 @@ export function Footer() {
 
         {/* Bottom bar */}
         <div
+          className="footer-bottom"
           style={{
             display: "flex",
             justifyContent: "space-between",
@@ -191,11 +196,18 @@ export function Footer() {
         @media (max-width: 900px) {
           .footer-grid {
             grid-template-columns: 1fr 1fr !important;
+            gap: 32px !important;
           }
         }
-        @media (max-width: 600px) {
+        @media (max-width: 480px) {
           .footer-grid {
             grid-template-columns: 1fr !important;
+            gap: 24px !important;
+          }
+          .footer-bottom {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
           }
         }
       `}</style>

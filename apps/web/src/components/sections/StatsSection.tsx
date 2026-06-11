@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { collection, query, where, getCountFromServer } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 interface LiveStats {
@@ -10,47 +10,7 @@ interface LiveStats {
   citiesCovered: number;
   ngoPartners: number;
   rescueCasesResolved: number;
-  animalsAdopted: number;
-}
-
-// Fetch real counts from Firestore
-async function fetchStats(): Promise<LiveStats> {
-  try {
-    const [resolvedRescues, volunteers, ngos] = await Promise.all([
-      getCountFromServer(
-        query(collection(db, "rescues"), where("status", "==", "resolved"))
-      ),
-      getCountFromServer(
-        query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"))
-      ),
-      getCountFromServer(
-        query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo"))
-      ),
-    ]);
-
-    const resolved = resolvedRescues.data().count;
-    const volunteerCount = volunteers.data().count;
-    const ngoCount = ngos.data().count;
-
-    return {
-      animalsHelped: resolved,
-      activeVolunteers: volunteerCount,
-      citiesCovered: 1, // Hyderabad — will grow as platform expands
-      ngoPartners: ngoCount,
-      rescueCasesResolved: resolved,
-      animalsAdopted: 0, // Adoptions module coming soon
-    };
-  } catch {
-    // Return zeros on error — honest fallback
-    return {
-      animalsHelped: 0,
-      activeVolunteers: 0,
-      citiesCovered: 1,
-      ngoPartners: 0,
-      rescueCasesResolved: 0,
-      animalsAdopted: 0,
-    };
-  }
+  totalMembers: number;
 }
 
 const STAT_CONFIG = [
@@ -95,12 +55,12 @@ const STAT_CONFIG = [
     zeroMsg: "Every rescue starts somewhere",
   },
   {
-    key: "animalsAdopted" as keyof LiveStats,
+    key: "totalMembers" as keyof LiveStats,
     suffix: "",
-    label: "Animals Adopted",
-    emoji: "🏡",
+    label: "Community Members",
+    emoji: "👥",
     color: "#FFA726",
-    zeroMsg: "Your home could be first",
+    zeroMsg: "Be the first to join",
   },
 ];
 
@@ -152,15 +112,87 @@ export function StatsSection() {
     citiesCovered: 1,
     ngoPartners: 0,
     rescueCasesResolved: 0,
-    animalsAdopted: 0,
+    totalMembers: 0,
   });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    fetchStats().then((data) => {
-      setStats(data);
-      setLoaded(true);
-    });
+    // 1. Real-time total members
+    const unsubscribeMembers = onSnapshot(
+      collection(db, "public_profiles"),
+      (snap) => {
+        setStats((prev) => ({
+          ...prev,
+          totalMembers: snap.size,
+        }));
+        setLoaded(true);
+      },
+      (err) => {
+        console.error("Error listening to public_profiles count:", err);
+      }
+    );
+
+    // 2. Real-time active volunteers
+    const qVolunteers = query(
+      collection(db, "public_profiles"),
+      where("roles", "array-contains", "volunteer")
+    );
+    const unsubscribeVolunteers = onSnapshot(
+      qVolunteers,
+      (snap) => {
+        setStats((prev) => ({
+          ...prev,
+          activeVolunteers: snap.size,
+        }));
+      },
+      (err) => {
+        console.error("Error listening to active volunteers count:", err);
+      }
+    );
+
+    // 3. Real-time NGO partners
+    const qNgos = query(
+      collection(db, "public_profiles"),
+      where("roles", "array-contains", "ngo")
+    );
+    const unsubscribeNgos = onSnapshot(
+      qNgos,
+      (snap) => {
+        setStats((prev) => ({
+          ...prev,
+          ngoPartners: snap.size,
+        }));
+      },
+      (err) => {
+        console.error("Error listening to NGO partners count:", err);
+      }
+    );
+
+    // 4. Real-time rescues resolved
+    const qRescues = query(
+      collection(db, "rescues"),
+      where("status", "==", "resolved")
+    );
+    const unsubscribeRescues = onSnapshot(
+      qRescues,
+      (snap) => {
+        setStats((prev) => ({
+          ...prev,
+          animalsHelped: snap.size,
+          rescueCasesResolved: snap.size,
+        }));
+      },
+      (err) => {
+        console.error("Error listening to resolved rescues count:", err);
+      }
+    );
+
+    return () => {
+      unsubscribeMembers();
+      unsubscribeVolunteers();
+      unsubscribeNgos();
+      unsubscribeRescues();
+    };
   }, []);
 
   return (
@@ -201,7 +233,7 @@ export function StatsSection() {
               marginBottom: "12px",
             }}
           >
-            {loaded && (stats.animalsHelped > 0 || stats.activeVolunteers > 0)
+            {loaded && (stats.animalsHelped > 0 || stats.activeVolunteers > 0 || stats.totalMembers > 0)
               ? "Our Impact So Far"
               : "Where We Are Now — Day One"}
           </span>
@@ -215,7 +247,7 @@ export function StatsSection() {
               marginBottom: "16px",
             }}
           >
-            {loaded && (stats.animalsHelped > 0 || stats.activeVolunteers > 0)
+            {loaded && (stats.animalsHelped > 0 || stats.activeVolunteers > 0 || stats.totalMembers > 0)
               ? "Every number is a life that matters"
               : "Every number starts at zero."}
           </h2>
@@ -228,7 +260,7 @@ export function StatsSection() {
               lineHeight: 1.7,
             }}
           >
-            {loaded && (stats.animalsHelped > 0 || stats.activeVolunteers > 0)
+            {loaded && (stats.animalsHelped > 0 || stats.activeVolunteers > 0 || stats.totalMembers > 0)
               ? "Real animals rescued, real volunteers active, real lives changed — every stat here comes from the database."
               : "Be the first to make a difference. These numbers are honest because you deserve honest. No inflated statistics, ever."}
           </p>
