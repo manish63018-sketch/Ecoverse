@@ -134,7 +134,7 @@ export default function PixelSphere() {
     canvas.height = H;
 
     const isMobile = W < 768;
-    const radius = isMobile ? 160 : Math.min(W, H) * 0.28;
+    const radius = isMobile ? 120 : Math.min(W, H) * 0.23;
 
     centerXRef.current = W * 0.62;
     centerYRef.current = H * 0.44;
