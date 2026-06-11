@@ -58,6 +58,9 @@ interface GlobeDot {
   isLand: boolean;
   brightness: number;                      // 0-1 jitter
   size: number;
+  sparkleActive?: boolean;
+  sparkleTime?: number;
+  sparkleVal?: number;
 }
 
 function buildGlobeDots(count: number): GlobeDot[] {
@@ -85,12 +88,14 @@ function buildGlobeDots(count: number): GlobeDot[] {
       if (angleDeg < seed.r) { isLand = true; break; }
     }
 
-    dots.push({
-      x, y: yy, z,
-      isLand,
-      brightness: 0.6 + Math.random() * 0.4,
-      size: isLand ? 1.8 + Math.random() * 1.2 : 1.0 + Math.random() * 0.7,
-    });
+    if (isLand) {
+      dots.push({
+        x, y: yy, z,
+        isLand: true,
+        brightness: 0.6 + Math.random() * 0.4,
+        size: 0.8 + Math.random() * 0.6, // Smaller base size to match background sphere
+      });
+    }
   }
 
   // Extra land-mass dots (denser continent fill)
@@ -122,7 +127,7 @@ function buildGlobeDots(count: number): GlobeDot[] {
         x: nx/nl, y: ny/nl, z: nz/nl,
         isLand: true,
         brightness: 0.7 + Math.random() * 0.3,
-        size: 1.8 + Math.random() * 1.4,
+        size: 0.8 + Math.random() * 0.7, // Smaller base size to match background sphere
       });
     }
   }
@@ -146,6 +151,7 @@ export default function EarthGlobe() {
     rafId:     0,
     lastTime:  0,
     pulse:     0,              // used for subtle atmosphere shimmer
+    sparkleTimer: 0,
   });
 
   // Build dots once on mount
@@ -246,6 +252,19 @@ export default function EarthGlobe() {
       const depth = (z2 + 1) / 2;   // 0 = back, 1 = front
       const scale = fov / (fov + 1 - depth * 0.6);
 
+      // Animate sparkle progress per dot
+      if (dot.sparkleActive) {
+        dot.sparkleTime = (dot.sparkleTime || 0) + dt;
+        if (dot.sparkleTime < 150) {
+          dot.sparkleVal = dot.sparkleTime / 150; // Rising
+        } else if (dot.sparkleTime < 750) {
+          dot.sparkleVal = 1 - (dot.sparkleTime - 150) / 600; // Falling decay
+        } else {
+          dot.sparkleActive = false;
+          dot.sparkleVal = 0;
+        }
+      }
+
       projected.push({
         sx: cx + x1 * R * scale,
         sy: cy - y2 * R * scale,
@@ -255,62 +274,67 @@ export default function EarthGlobe() {
       });
     }
 
+    // ── Sparkle Trigger Accumulator (500ms intervals) ───
+    s.sparkleTimer += dt;
+    if (s.sparkleTimer >= 500) {
+      s.sparkleTimer = 0;
+      // Randomly select 5 dots on the front face that are not already sparkling
+      const candidates = projected.filter(
+        p => p.depth > 0.65 && !p.dot.sparkleActive
+      );
+      if (candidates.length > 0) {
+        const count = Math.min(candidates.length, 5);
+        for (let k = 0; k < count; k++) {
+          const idx = Math.floor(Math.random() * candidates.length);
+          const p = candidates[idx];
+          if (p && p.dot) {
+            p.dot.sparkleActive = true;
+            p.dot.sparkleTime = 0;
+            p.dot.sparkleVal = 0;
+            candidates.splice(idx, 1);
+          }
+        }
+      }
+    }
+
     // ── Sort back-to-front ──
     projected.sort((a, b) => a.depth - b.depth);
 
-    // ── Draw grid lines (latitude / longitude) ──
+    // ── Draw Mesh Connecting Lines (Neural-net tech mesh instead of lat/lon grids) ──
     if (!isMobile) {
       ctx.save();
-      ctx.globalAlpha = 0.06;
-      ctx.strokeStyle = '#66BB6A';
-      ctx.lineWidth   = 0.5;
+      for (let i = 0; i < projected.length; i++) {
+        const p1 = projected[i];
+        if (!p1.visible || p1.depth < 0.45) continue;
 
-      // Draw 6 latitude circles
-      for (let latDeg = -60; latDeg <= 60; latDeg += 30) {
-        const latRad = latDeg * Math.PI / 180;
-        const ry     = Math.sin(latRad);
-        const rr     = Math.cos(latRad);
-        ctx.beginPath();
-        for (let lon = 0; lon <= 360; lon += 2) {
-          const lonRad = lon * Math.PI / 180;
-          const dx  = rr * Math.cos(lonRad);
-          const dz  = rr * Math.sin(lonRad);
-          // rotate
-          const rx1 =  dx * cosY + dz * sinY;
-          const rz1 = -dx * sinY + dz * cosY;
-          const ry2 =  ry * cosX - rz1 * sinX;
-          const rz2 =  ry * sinX + rz1 * cosX;
-          if (rz2 < -0.05) continue;
-          const sc  = fov / (fov + 1 - ((rz2 + 1) / 2) * 0.6);
-          const px  = cx + rx1 * R * sc;
-          const py  = cy - ry2 * R * sc;
-          if (lon === 0) ctx.moveTo(px, py);
-          else           ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-      }
+        const neighbors: { p: Projected; dist: number }[] = [];
+        for (let j = i + 1; j < projected.length; j++) {
+          const p2 = projected[j];
+          if (!p2.visible || p2.depth < 0.45) continue;
 
-      // Draw 6 longitude arcs
-      for (let lonDeg = 0; lonDeg < 180; lonDeg += 30) {
-        const lonRad = lonDeg * Math.PI / 180;
-        ctx.beginPath();
-        for (let lat = -90; lat <= 90; lat += 2) {
-          const latRad = lat * Math.PI / 180;
-          const dx  = Math.cos(latRad) * Math.cos(lonRad);
-          const dz  = Math.cos(latRad) * Math.sin(lonRad);
-          const dy  = Math.sin(latRad);
-          const rx1 =  dx * cosY + dz * sinY;
-          const rz1 = -dx * sinY + dz * cosY;
-          const ry2 =  dy * cosX - rz1 * sinX;
-          const rz2 =  dy * sinX + rz1 * cosX;
-          if (rz2 < -0.05) continue;
-          const sc  = fov / (fov + 1 - ((rz2 + 1) / 2) * 0.6);
-          const px  = cx + rx1 * R * sc;
-          const py  = cy - ry2 * R * sc;
-          if (lat === -90) ctx.moveTo(px, py);
-          else             ctx.lineTo(px, py);
+          const dx = p1.sx - p2.sx;
+          const dy = p1.sy - p2.sy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < 32) {
+            neighbors.push({ p: p2, dist });
+          }
         }
-        ctx.stroke();
+
+        // Limit to closest 2 neighbors to match clean look
+        neighbors.sort((a, b) => a.dist - b.dist);
+        const limit = Math.min(neighbors.length, 2);
+
+        for (let k = 0; k < limit; k++) {
+          const n = neighbors[k];
+          const lineOpacity = 0.12 * (1 - n.dist / 32) * p1.depth;
+          ctx.strokeStyle = `rgba(102, 187, 106, ${lineOpacity})`;
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(p1.sx, p1.sy);
+          ctx.lineTo(n.p.sx, n.p.sy);
+          ctx.stroke();
+        }
       }
       ctx.restore();
     }
@@ -326,33 +350,43 @@ export default function EarthGlobe() {
       }
 
       const { depth, dot } = p;
-      // Depth-based fade: back hemisphere is darker
-      const depthFade = depth * depth; // quadratic for dramatic contrast
-      const radius    = dot.size * (0.4 + depth * 0.7) * (dot.isLand ? 1.3 : 0.85);
+      const scale = fov / (fov + 1 - depth * 0.6);
+      
+      // Calculate smaller crisp radius by depth (same scaling factor as PixelSphere)
+      const baseRadius = scale * 1.6 * (0.5 + depth * 0.5);
+      const finalRadius = Math.max(0.3, baseRadius * dot.size);
 
-      let r: number, g: number, b: number, alpha: number;
+      // Same emerald depth palette as background sphere
+      let color = '#1a5c1e'; // dim far back
+      if (depth > 0.75) color = '#a5d6a7'; // bright core front
+      else if (depth > 0.45) color = '#66BB6A'; // leaf green mid
+      else if (depth > 0.2) color = '#2E7D32'; // deep green
 
-      if (dot.isLand) {
-        // Land — vivid green, brighter near front
-        const sparkle = 0.85 + 0.15 * Math.sin(s.pulse * 2 + dot.brightness * 8);
-        r = Math.floor(65  + depthFade * 100 * sparkle);
-        g = Math.floor(130 + depthFade * 85  * sparkle);
-        b = Math.floor(65  + depthFade * 50  * sparkle);
-        alpha = 0.25 + depthFade * 0.75;
-      } else {
-        // Ocean — very subtle blue-green dots
-        r = Math.floor(15 + depthFade * 35);
-        g = Math.floor(50 + depthFade * 70);
-        b = Math.floor(45 + depthFade * 60);
-        alpha = 0.08 + depthFade * 0.22;
+      let dotOpacity = 0.15 + depth * 0.75;
+      let shadowBlur = 0;
+
+      // Sparkle triggers matching PixelSphere
+      if (dot.sparkleActive && dot.sparkleVal !== undefined) {
+        color = '#a5d6a7';
+        dotOpacity = dotOpacity + (1.0 - dotOpacity) * dot.sparkleVal;
+        shadowBlur = 14 * dot.sparkleVal;
+      } else if (depth > 0.7) {
+        shadowBlur = scale * 5; // soft standard glow for front facing dots
       }
 
       ctx.beginPath();
-      ctx.arc(p.sx, p.sy, Math.max(0.3, radius), 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
-      ctx.globalAlpha = 1;
+      ctx.arc(p.sx, p.sy, finalRadius, 0, Math.PI * 2);
+      
+      ctx.shadowColor = '#66BB6A';
+      ctx.shadowBlur = shadowBlur;
+      ctx.fillStyle = color;
+      ctx.globalAlpha = Math.max(0, Math.min(1, dotOpacity));
       ctx.fill();
     }
+
+    // Reset shadow blur and global alpha
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1.0;
 
     // ── Specular highlight (white sheen top-left) ──
     const specGrad = ctx.createRadialGradient(
