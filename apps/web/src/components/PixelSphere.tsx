@@ -134,10 +134,10 @@ export default function PixelSphere() {
     canvas.height = H;
 
     const isMobile = W < 768;
-    const radius = isMobile ? 120 : Math.min(W, H) * 0.23;
+    const radius = isMobile ? 170 : Math.min(W, H) * 0.38;
 
-    centerXRef.current = W * 0.62;
-    centerYRef.current = H * 0.44;
+    centerXRef.current = isMobile ? W * 0.5 : W * 0.66;
+    centerYRef.current = isMobile ? H * 0.60 : H * 0.46;
     sphereRRef.current = radius;
     isMobileRef.current = isMobile;
 
@@ -163,8 +163,9 @@ export default function PixelSphere() {
   // ── 4. Main Event Listeners for Interaction ──────────────────
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
-      // Allow drag interactions from the right 60% of the viewport (where the sphere sits)
-      if (e.clientX > window.innerWidth * 0.4) {
+      // Allow drag interactions from the right 80% on desktop, anywhere on mobile
+      const threshold = window.innerWidth < 768 ? 0 : window.innerWidth * 0.2;
+      if (e.clientX > threshold) {
         isDraggingRef.current = true;
         lastMouseXRef.current = e.clientX;
         lastMouseYRef.current = e.clientY;
@@ -195,7 +196,8 @@ export default function PixelSphere() {
     // Mobile touch events
     const handleTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
-      if (touch && touch.clientX > window.innerWidth * 0.4) {
+      const threshold = window.innerWidth < 768 ? 0 : window.innerWidth * 0.2;
+      if (touch && touch.clientX > threshold) {
         isDraggingRef.current = true;
         lastMouseXRef.current = touch.clientX;
         lastMouseYRef.current = touch.clientY;

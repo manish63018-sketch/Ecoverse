@@ -6,11 +6,6 @@ import { EcoVerseLogo } from "@/components/brand/Logo";
 import { ArrowRight, AlertCircle } from "lucide-react";
 import dynamic from "next/dynamic";
 
-// Lazy-load the heavy canvas globe
-const EarthGlobe = dynamic(() => import("@/components/sections/EarthGlobe"), {
-  ssr: false,
-});
-
 export function HeroSection() {
   return (
     <section
@@ -26,17 +21,6 @@ export function HeroSection() {
         backgroundColor: "transparent",
       }}
     >
-      {/* ── Layer 0: Full-screen Earth globe — fills the ENTIRE background ── */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          inset:    0,
-          zIndex:   0,
-        }}
-      >
-        <EarthGlobe />
-      </div>
 
       {/* ── Layer 1: Left-side overlay so text is readable against the globe ── */}
       <div
@@ -253,21 +237,6 @@ export function HeroSection() {
             </div>
           ))}
         </div>
-
-        {/* Drag hint */}
-        <p
-          className="hero-drag-hint"
-          style={{
-            marginTop:     "36px",
-            fontSize:      "0.7rem",
-            color:         "rgba(102,187,106,0.4)",
-            letterSpacing: "0.1em",
-            fontWeight:    600,
-            animation:     "fade-up 0.7s 1.0s ease both",
-          }}
-        >
-          ↻ DRAG THE EARTH TO ROTATE
-        </p>
       </div>
 
       {/* ── Keyframes ── */}
