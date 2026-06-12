@@ -30,11 +30,7 @@ export default function DonatePage() {
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
 
   // Anonymized mock donors
-  const [donors, setDonors] = useState<Donor[]>([
-    { name: "A*** K***", amount: 500, time: "2 hours ago" },
-    { name: "R*** S***", amount: 1000, time: "1 day ago" },
-    { name: "M*** P***", amount: 250, time: "3 days ago" },
-  ]);
+  const [donors, setDonors] = useState<Donor[]>([]);
 
   const handleAmountSelect = (val: number) => {
     setAmount(val);
