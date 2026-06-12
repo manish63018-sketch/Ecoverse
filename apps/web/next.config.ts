@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
   },
+  outputFileTracingRoot: path.join(__dirname, "../.."),
   turbopack: {
     root: path.join(__dirname, "../.."),
   },
