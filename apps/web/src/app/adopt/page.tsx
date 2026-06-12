@@ -13,6 +13,8 @@ import { collection, query, onSnapshot, doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import dynamic from "next/dynamic";
 import type { LocationSelection } from "@/types/location";
+import AnimalCard from "@/components/AnimalCard";
+import EmptyState from "@/components/EmptyState";
 
 const LocationPicker = dynamic(
   () => import("@/components/sections/LocationPicker"),
@@ -356,124 +358,17 @@ export default function AdoptPage() {
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : filteredPets.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "80px 0", background: "rgba(21, 35, 23, 0.2)", borderRadius: "var(--radius-xl)", border: "1px dashed rgba(102,187,106,0.1)" }}>
-            <p style={{ color: "rgba(232, 245, 233, 0.5)", fontSize: "1.1rem" }}>No matching pets found.</p>
-            <p style={{ color: "rgba(232, 245, 233, 0.3)", fontSize: "0.9rem", marginTop: "4px" }}>Try adjusting your filters or search query.</p>
-          </div>
+          <EmptyState
+            emoji="😿"
+            title="No animals listed yet"
+            subtitle="Are you rescuing an animal? List it for adoption."
+            ctaText="Add Animal for Adoption →"
+            onClick={() => setShowListModal(true)}
+          />
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "28px" }}>
             {filteredPets.map((pet) => (
-              <div
-                key={pet.id}
-                style={{
-                  background: "rgba(21, 35, 23, 0.45)",
-                  border: "1px solid rgba(102, 187, 106, 0.12)",
-                  borderRadius: "var(--radius-xl)",
-                  overflow: "hidden",
-                  display: "flex",
-                  flexDirection: "column",
-                  transition: "all 0.2s",
-                }}
-                className="pet-card"
-              >
-                {/* Pet Image / Colorful Placeholder */}
-                <div
-                  style={{
-                    height: "180px",
-                    background: pet.imageColor,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "4.5rem",
-                    position: "relative",
-                  }}
-                >
-                  <span style={{ filter: "drop-shadow(0 8px 16px rgba(0,0,0,0.3))" }}>{pet.emoji}</span>
-                  {/* Gender Badge */}
-                  <span
-                    style={{
-                      position: "absolute",
-                      bottom: "12px",
-                      right: "12px",
-                      background: "rgba(10, 16, 11, 0.75)",
-                      backdropFilter: "blur(4px)",
-                      color: "#FFFFFF",
-                      padding: "4px 10px",
-                      borderRadius: "var(--radius-full)",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      border: "1px solid rgba(255,255,255,0.1)",
-                    }}
-                  >
-                    {pet.gender}
-                  </span>
-                </div>
-
-                {/* Content */}
-                <div style={{ padding: "24px", flex: 1, display: "flex", flexDirection: "column", gap: "14px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
-                      <h3 style={{ fontSize: "1.35rem", fontWeight: 800, color: "#FFFFFF" }}>{pet.name}</h3>
-                      <p style={{ color: "rgba(232, 245, 233, 0.5)", fontSize: "0.85rem", marginTop: "2px" }}>
-                        {pet.breed} · {pet.age}
-                      </p>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "#66BB6A", fontSize: "0.8rem", fontWeight: 600 }}>
-                      <MapPin size={13} />
-                      <span>{pet.location}, {pet.city}{pet.state ? `, ${pet.state}` : ""}</span>
-                    </div>
-                  </div>
-
-                  <p style={{ color: "rgba(232, 245, 233, 0.7)", fontSize: "0.85rem", lineHeight: 1.5, flex: 1 }}>
-                    {pet.story}
-                  </p>
-
-                  {/* Medical Specs */}
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    {pet.vaccinated && (
-                      <span style={{ fontSize: "0.7rem", background: "rgba(102,187,106,0.1)", border: "1px solid rgba(102,187,106,0.25)", color: "#A5D6A7", padding: "3px 8px", borderRadius: "4px", fontWeight: 700 }}>
-                        ✓ VACCINATED
-                      </span>
-                    )}
-                    {pet.neutered && (
-                      <span style={{ fontSize: "0.7rem", background: "rgba(102,187,106,0.1)", border: "1px solid rgba(102,187,106,0.25)", color: "#A5D6A7", padding: "3px 8px", borderRadius: "4px", fontWeight: 700 }}>
-                        ✓ NEUTERED
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Action Button */}
-                  <button
-                    onClick={() => { setSelectedPet(pet); setShowInquireModal(true); }}
-                    style={{
-                      width: "100%",
-                      background: "rgba(102, 187, 106, 0.12)",
-                      border: "1px solid rgba(102, 187, 106, 0.25)",
-                      color: "#A5D6A7",
-                      padding: "12px",
-                      borderRadius: "var(--radius-md)",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      fontSize: "0.85rem",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "6px",
-                      transition: "all 0.2s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#66BB6A";
-                      e.currentTarget.style.color = "#FFFFFF";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "rgba(102, 187, 106, 0.12)";
-                      e.currentTarget.style.color = "#A5D6A7";
-                    }}
-                  >
-                    <Heart size={14} /> Inquire to Adopt
-                  </button>
-                </div>
-              </div>
+              <AnimalCard key={pet.id} pet={pet} />
             ))}
           </div>
         )}

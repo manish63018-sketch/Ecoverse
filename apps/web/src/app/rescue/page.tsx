@@ -3,50 +3,35 @@
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import {
-  ArrowLeft, Plus, MapPin, Activity, Shield, Clock,
-  AlertCircle, CheckCircle, Search, Filter, ChevronDown,
-  Layers, Navigation
-} from "lucide-react";
+import { ArrowLeft, Plus, Shield, Search, Filter, Layers, Navigation, X, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
-import type { RescueCase } from "@/types/rescue";
+import dynamic from "next/dynamic";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { getApiUrl } from "@/lib/api";
 import { db } from "@/lib/firebase";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
+import { doc, updateDoc, setDoc } from "firebase/firestore";
+import type { RescueCase, EmergencyLevel, RescueStatus } from "@/types/rescue";
+import type { LocationSelection } from "@/types/location";
+import PageHero from "@/components/PageHero";
+import EmptyState from "@/components/EmptyState";
+import CaseCard from "@/components/CaseCard";
 
-const SEVERITY_COLORS: Record<string, { bg: string; text: string }> = {
-  critical: { bg: "rgba(239,83,80,0.15)",   text: "#EF5350" },
-  high:     { bg: "rgba(255,167,38,0.15)",   text: "#FFA726" },
-  medium:   { bg: "rgba(255,213,79,0.12)",   text: "#FFE082" },
-  low:      { bg: "rgba(102,187,106,0.12)",  text: "#A5D6A7" },
-};
+const LocationPicker = dynamic(
+  () => import("@/components/sections/LocationPicker"),
+  { ssr: false }
+);
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  open:        { bg: "rgba(239,83,80,0.1)",  text: "#EF5350" },
-  assigned:    { bg: "rgba(66,165,245,0.1)", text: "#42A5F5" },
-  in_progress: { bg: "rgba(255,167,38,0.1)", text: "#FFA726" },
-  escalated:   { bg: "rgba(255,61,0,0.12)",  text: "#FF6D00" },
-  resolved:    { bg: "rgba(102,187,106,0.1)", text: "#66BB6A" },
-};
-
-const ANIMAL_ICONS: Record<string, string> = {
-  dog: "🐶", cat: "🐱", cow: "🐮", bird: "🐦", pigeon: "🕊️", other: "🐾",
-};
-
-
-
-
-// Location scope levels
 type LocationScope = "area" | "city" | "state";
+type TabType = "all" | "open" | "in_progress" | "resolved" | "my_cases";
 
 export default function RescuePage() {
   const { user, loading: authLoading } = useAuth();
 
-  const [cases, setCases] = useState<(RescueCase & { city_name?: string; state_name?: string })[]>([]);
+  const [cases, setCases] = useState<RescueCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<LocationScope>("area");
+  const [activeTab, setActiveTab] = useState<TabType>("all");
   const [userLocation, setUserLocation] = useState<{
     area_id?: string;
     city_id?: string;
@@ -56,56 +41,24 @@ export default function RescuePage() {
   } | null>(null);
 
   // Filters
-  const [searchTerm, setSearchTerm]     = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [animalFilter, setAnimalFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
 
-  // Cache of volunteer profiles for assigned cases
-  const [volunteerProfiles, setVolunteerProfiles] = useState<Record<string, { name: string; isActive: boolean }>>({});
-  // Track which case is currently being accepted (to disable button)
+  // SOS Modal
+  const [showSosModal, setShowSosModal] = useState(false);
+  const [sosStep, setSosStep] = useState(1);
+  const [sosLocation, setSosLocation] = useState<LocationSelection | null>(null);
+  const [sosAnimal, setSosAnimal] = useState("dog");
+  const [sosCondition, setSosCondition] = useState("");
+  const [sosSeverity, setSosSeverity] = useState<EmergencyLevel>("medium");
+  const [sosDesc, setSosDesc] = useState("");
+  const [sosPhone, setSosPhone] = useState("");
+  const [sosAddress, setSosAddress] = useState("");
+  const [sosSubmitting, setSosSubmitting] = useState(false);
+
+  // Active acceptance tracking
   const [submittingCaseId, setSubmittingCaseId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const idsToFetch = Array.from(new Set(
-      cases
-        .map(c => c.assigned_volunteer_id)
-        .filter((id): id is string => !!id)
-    ));
-
-    if (idsToFetch.length === 0) return;
-
-    const fetchVolunteerProfiles = async () => {
-      const profiles = { ...volunteerProfiles };
-      let updated = false;
-
-      for (const id of idsToFetch) {
-        if (profiles[id]) continue;
-        try {
-          const docRef = doc(db, "public_profiles", id);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            profiles[id] = {
-              name: data.displayName || "Ecoverse Volunteer",
-              isActive: data.volunteerInfo?.availableNow ?? data.availableNow ?? true
-            };
-            updated = true;
-          } else {
-            profiles[id] = { name: "Ecoverse Volunteer", isActive: false };
-            updated = true;
-          }
-        } catch (err) {
-          console.warn("Error fetching volunteer profile:", id, err);
-        }
-      }
-
-      if (updated) {
-        setVolunteerProfiles(profiles);
-      }
-    };
-
-    fetchVolunteerProfiles();
-  }, [cases]);
 
   // ── Load user's location profile ─────────────────────────────
   useEffect(() => {
@@ -132,15 +85,12 @@ export default function RescuePage() {
     loadUserLocation();
   }, [user]);
 
-  // ── Fetch cases by scope ─────────────────────────────────────
+  // ── Fetch cases ──────────────────────────────────────────────
   const fetchCases = useCallback(async () => {
     setLoading(true);
-
     try {
       let url = "/api/rescues";
-
       if (user) {
-        // Build query params based on scope
         if (userLocation && userLocation.area_id !== "all-areas") {
           if (scope === "area" && userLocation.area_id) {
             url += `?area_id=${userLocation.area_id}`;
@@ -149,14 +99,12 @@ export default function RescuePage() {
           } else if (scope === "state" && userLocation.state_id) {
             url += `?state_id=${userLocation.state_id}`;
           } else {
-            // Fallback: use firebase_uid for auto-detection
             url += `?firebase_uid=${user.uid}`;
           }
         } else {
           url += `?firebase_uid=${user.uid}`;
         }
       }
-
       const res = await fetch(getApiUrl(url));
       const data = await res.json();
       setCases(data.cases ?? []);
@@ -174,18 +122,17 @@ export default function RescuePage() {
       setUserLocation({
         display_zone: "All Active Locations",
         area_name: "All Areas",
-        area_id: "all-areas"
+        area_id: "all-areas",
       });
     }
     fetchCases();
-    // Refresh every 30 seconds for near-real-time feel
     const interval = setInterval(fetchCases, 30000);
     return () => clearInterval(interval);
   }, [user, authLoading, fetchCases]);
 
   const handleAcceptDispatch = async (caseId: string) => {
     if (!user) return toast.error("Please login to accept dispatches");
-    if (submittingCaseId) return; // prevent double-submit
+    if (submittingCaseId) return;
     setSubmittingCaseId(caseId);
     try {
       const res = await fetch(getApiUrl(`/api/rescues/${caseId}/respond`), {
@@ -196,481 +143,640 @@ export default function RescuePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to accept");
 
-      // Optimistically update local case status so UI reflects change immediately
-      setCases(prev =>
-        prev.map(c =>
+      setCases((prev) =>
+        prev.map((c) =>
           c.id === caseId
-            ? { ...c, status: "assigned" as any, assigned_volunteer_id: user.uid }
+            ? { ...c, status: "assigned", assigned_volunteer_id: user.uid }
             : c
         )
       );
 
-      // Sync to Firestore
       try {
         await updateDoc(doc(db, "rescues", caseId), {
           status: "assigned",
-          assignedVolunteerId: user.uid
+          assignedVolunteerId: user.uid,
         });
       } catch (fsErr) {
-        console.error("Failed to sync volunteer assignment to Firestore:", fsErr);
+        console.error("Failed to sync assignment to Firestore:", fsErr);
       }
 
       toast.success("✅ Rescue case accepted! You are now assigned.");
-      fetchCases(); // refresh from server for full consistency
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to accept rescue case");
+      fetchCases();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to accept rescue case");
     } finally {
       setSubmittingCaseId(null);
     }
   };
 
-  // Apply client-side filters
-  const filtered = cases.filter((r) => {
+  // SOS wizard submission
+  const handleSosSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sosLocation) return toast.error("Please select location details");
+    if (!sosCondition.trim() || !sosPhone.trim()) return toast.error("Fill in condition and contact phone");
+
+    setSosSubmitting(true);
+    try {
+      const res = await fetch(getApiUrl("/api/rescues"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reporter_user_id: user?.uid ?? null,
+          state_id: sosLocation.stateId,
+          city_id: sosLocation.cityId,
+          area_id: sosLocation.areaId,
+          exact_lat: 17.4156, // simulated
+          exact_lng: 78.4347,
+          animal_type: sosAnimal,
+          condition_summary: sosCondition,
+          emergency_level: sosSeverity,
+          description: [
+            sosDesc,
+            sosAddress ? `Address details: ${sosAddress}` : "",
+            sosPhone ? `Contact phone: ${sosPhone}` : "",
+          ].filter(Boolean).join("\n"),
+          reporter_name: user?.displayName || "EcoVerse Reporter",
+          reporter_phone: sosPhone,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to report");
+
+      // Firestore sync
+      try {
+        const newCase = data.case;
+        await setDoc(doc(db, "rescues", newCase.id), {
+          caseId: newCase.id,
+          reporterId: user?.uid ?? "anonymous",
+          reporterContact: { name: user?.displayName || "EcoVerse Reporter", phone: sosPhone },
+          animalType: sosAnimal,
+          conditionDescription: sosCondition,
+          severity: sosSeverity,
+          status: "reported",
+          location: {
+            latitude: 17.4156,
+            longitude: 78.4347,
+            addressText: newCase.display_zone || sosLocation.areaName,
+          },
+          createdAt: newCase.created_at || new Date().toISOString(),
+        });
+      } catch (fsErr) {
+        console.error("Firestore sync error:", fsErr);
+      }
+
+      toast.success("🚨 SOS alert successfully dispatched!");
+      setShowSosModal(false);
+      // Reset wizard
+      setSosStep(1);
+      setSosCondition("");
+      setSosDesc("");
+      setSosPhone("");
+      setSosAddress("");
+      fetchCases();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit SOS report");
+    } finally {
+      setSosSubmitting(false);
+    }
+  };
+
+  // Tab Filtering & Counts
+  const openCasesCount = cases.filter((c) => (c.status as string) === "open" || (c.status as string) === "reported").length;
+  const inProgressCount = cases.filter((c) => (c.status as string) === "in_progress" || (c.status as string) === "assigned").length;
+  const resolvedCount = cases.filter((c) => c.status === "resolved").length;
+  const myCasesCount = user ? cases.filter((c) => c.assigned_volunteer_id === user.uid || c.reporter_user_id === user.uid).length : 0;
+
+  const tabFiltered = cases.filter((c) => {
+    if (activeTab === "open") return (c.status as string) === "open" || (c.status as string) === "reported";
+    if (activeTab === "in_progress") return (c.status as string) === "in_progress" || (c.status as string) === "assigned";
+    if (activeTab === "resolved") return c.status === "resolved";
+    if (activeTab === "my_cases") return user && (c.assigned_volunteer_id === user.uid || c.reporter_user_id === user.uid);
+    return true;
+  });
+
+  // Client-side Filters (Search & Animal Select)
+  const filtered = tabFiltered.filter((r) => {
     if (searchTerm.trim()) {
       const t = searchTerm.toLowerCase();
       if (
         !r.condition_summary?.toLowerCase().includes(t) &&
         !r.display_zone?.toLowerCase().includes(t) &&
         !r.animal_type?.toLowerCase().includes(t)
-      ) return false;
+      )
+        return false;
     }
     if (animalFilter !== "all" && r.animal_type !== animalFilter) return false;
     if (severityFilter !== "all" && r.emergency_level !== severityFilter) return false;
     return true;
   });
 
-  const hasNoLocation = !userLocation?.area_id;
+  const hasNoLocation = user && !userLocation?.area_id;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a1a0e", color: "#E8F5E9", fontFamily: "var(--font-sans), sans-serif", paddingBottom: "80px" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#050f07",
+        color: "#E8F5E9",
+        fontFamily: "var(--font-sans), sans-serif",
+      }}
+    >
       <Navbar />
 
-      <div style={{ paddingTop: "72px" }}>
-        {/* ── Sticky Header ─────────────────────────────────────── */}
-        <div style={{
-          background: "rgba(15,26,16,0.95)",
-          borderBottom: "1px solid rgba(102,187,106,0.12)",
-          padding: "18px 24px",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          position: "sticky", top: "72px", zIndex: 50,
-          backdropFilter: "blur(16px)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <Link href="/" style={{ color: "rgba(232,245,233,0.55)", textDecoration: "none", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.875rem" }}>
-              <ArrowLeft size={16} /> Home
-            </Link>
-            <div>
-              <h1 style={{ fontSize: "1.2rem", fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
-                Live Rescue Board
-              </h1>
-              {userLocation?.display_zone && (
-                <p style={{ fontSize: "0.72rem", color: "rgba(232,245,233,0.45)", margin: "2px 0 0 0", display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Navigation size={10} /> {userLocation.display_zone}
-                </p>
-              )}
-            </div>
-          </div>
-          <Link
-            href="/sos"
-            style={{
-              display: "flex", alignItems: "center", gap: "8px",
-              background: "linear-gradient(135deg, #EF5350, #C62828)",
-              border: "none", color: "#FFFFFF",
-              fontWeight: 700, fontSize: "0.85rem",
-              padding: "10px 18px", borderRadius: "999px",
-              textDecoration: "none", boxShadow: "0 4px 12px rgba(239,83,80,0.3)",
-            }}
-          >
-            <Plus size={15} /> Report SOS
-          </Link>
-        </div>
+      {/* Hero */}
+      <PageHero
+        tag="🐾 Rescue Board"
+        h1="Animal Rescue Board"
+        subtitle="Report, track, and resolve animal rescue cases across India."
+        ctas={[
+          { label: "🚨 Report Emergency", variant: "danger", onClick: () => setShowSosModal(true) },
+          { label: "+ New Rescue Case", variant: "primary", onClick: () => setShowSosModal(true) },
+        ]}
+      />
 
-        <div className="container" style={{ maxWidth: "1000px", margin: "0 auto", padding: "28px 24px" }}>
-
-          {/* ── Guest Warning Banner ───────────────────────────── */}
-          {!user && (
-            <div style={{
-              padding: "16px 20px",
-              background: "rgba(255,167,38,0.08)",
-              border: "1px solid rgba(255,167,38,0.25)",
-              borderRadius: "12px",
-              marginBottom: "24px",
-              display: "flex", gap: "12px", alignItems: "flex-start",
-            }}>
-              <AlertCircle size={18} style={{ color: "#FFA726", flexShrink: 0, marginTop: "2px" }} />
-              <div>
-                <div style={{ fontWeight: 700, color: "#FFA726", fontSize: "0.9rem" }}>Guest Preview Mode</div>
-                <p style={{ color: "rgba(232,245,233,0.6)", fontSize: "0.82rem", margin: "4px 0 8px 0" }}>
-                  You are currently viewing the live rescue board in preview mode. Please log in or register to report new cases, receive dispatches, or contact other volunteers.
-                </p>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <Link
-                    href="/login"
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "6px",
-                      color: "#FFA726", fontWeight: 700, fontSize: "0.8rem",
-                      textDecoration: "none", padding: "6px 12px",
-                      background: "rgba(255,167,38,0.1)", borderRadius: "6px",
-                      border: "1px solid rgba(255,167,38,0.25)",
-                    }}
-                  >
-                    Sign In
-                  </Link>
-                  <Link
-                    href="/signup"
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "6px",
-                      color: "#E8F5E9", fontWeight: 700, fontSize: "0.8rem",
-                      textDecoration: "none", padding: "6px 12px",
-                      background: "rgba(102,187,106,0.15)", borderRadius: "6px",
-                      border: "1px solid rgba(102,187,106,0.25)",
-                    }}
-                  >
-                    Join EcoVerse
-                  </Link>
-                </div>
-              </div>
+      {/* Location scope selection */}
+      {user && userLocation?.area_id && (
+        <div style={{ borderBottom: "1px solid rgba(102,187,106,0.1)" }} className="scope-switcher-wrapper">
+          <div className="container" style={{ maxWidth: "1000px", margin: "0 auto", padding: "16px 24px", display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <Layers size={14} style={{ color: "#66BB6A" }} />
+              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "rgba(232,245,233,0.7)" }}>Scope:</span>
             </div>
-          )}
-
-          {/* ── No Location Warning ───────────────────────────── */}
-          {user && hasNoLocation && (
-            <div style={{
-              padding: "16px 20px",
-              background: "rgba(255,167,38,0.08)",
-              border: "1px solid rgba(255,167,38,0.25)",
-              borderRadius: "12px",
-              marginBottom: "24px",
-              display: "flex", gap: "12px", alignItems: "flex-start",
-            }}>
-              <AlertCircle size={18} style={{ color: "#FFA726", flexShrink: 0, marginTop: "2px" }} />
-              <div>
-                <div style={{ fontWeight: 700, color: "#FFA726", fontSize: "0.9rem" }}>Location Not Set</div>
-                <p style={{ color: "rgba(232,245,233,0.6)", fontSize: "0.82rem", margin: "4px 0 8px 0" }}>
-                  Your area is not configured. Set your State → City → Area in your profile to see location-isolated rescue cases.
-                </p>
-                <Link
-                  href="/profile"
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: "6px",
-                    color: "#FFA726", fontWeight: 700, fontSize: "0.8rem",
-                    textDecoration: "none", padding: "6px 12px",
-                    background: "rgba(255,167,38,0.1)", borderRadius: "6px",
-                    border: "1px solid rgba(255,167,38,0.25)",
-                  }}
-                >
-                  <MapPin size={13} /> Set My Location
-                </Link>
-              </div>
-            </div>
-          )}
-
-          {/* ── Location Scope Switcher ───────────────────────── */}
-          {user && userLocation?.area_id && (
-            <div style={{
-              background: "rgba(21,35,23,0.5)",
-              border: "1px solid rgba(102,187,106,0.12)",
-              borderRadius: "14px",
-              padding: "16px 20px",
-              marginBottom: "20px",
-              display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center",
-              justifyContent: "space-between",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Layers size={14} style={{ color: "#66BB6A" }} />
-                <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "rgba(232,245,233,0.7)" }}>Showing cases in:</span>
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                {(["area", "city", "state"] as LocationScope[]).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setScope(s)}
-                    style={{
-                      background: scope === s ? "rgba(102,187,106,0.18)" : "rgba(10,16,11,0.5)",
-                      border: `1px solid ${scope === s ? "rgba(102,187,106,0.45)" : "rgba(102,187,106,0.1)"}`,
-                      color: scope === s ? "#A5D6A7" : "rgba(232,245,233,0.45)",
-                      borderRadius: "8px",
-                      padding: "7px 14px",
-                      fontSize: "0.8rem",
-                      fontWeight: scope === s ? 700 : 500,
-                      cursor: "pointer",
-                      fontFamily: "var(--font-sans)",
-                      transition: "all 0.15s",
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {s === "area" ? `📍 ${userLocation.area_name ?? "My Area"}` : s === "city" ? "🏙 My City" : "🗺 My State"}
-                  </button>
-                ))}
-              </div>
-              <div style={{ fontSize: "0.72rem", color: "rgba(232,245,233,0.35)", display: "flex", alignItems: "center", gap: "4px" }}>
-                <Shield size={11} />
-                {scope === "area" ? "Strictest — same area only" : scope === "city" ? "All areas in your city" : "All cities in your state"}
-              </div>
-            </div>
-          )}
-
-          {/* ── Filter Bar ────────────────────────────────────── */}
-          <div style={{
-            background: "rgba(21,35,23,0.5)",
-            backdropFilter: "blur(16px)",
-            border: "1px solid rgba(102,187,106,0.1)",
-            borderRadius: "14px",
-            padding: "16px 20px",
-            marginBottom: "24px",
-            display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center",
-          }}>
-            <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
-              <Search size={15} style={{ position: "absolute", left: "13px", top: "50%", transform: "translateY(-50%)", color: "rgba(102,187,106,0.4)" }} />
-              <input
-                type="text"
-                placeholder="Search condition, location, or animal type..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{
-                  width: "100%", background: "rgba(10,16,11,0.6)",
-                  border: "1px solid rgba(102,187,106,0.18)", borderRadius: "9px",
-                  padding: "9px 14px 9px 38px", color: "#E8F5E9",
-                  fontSize: "0.875rem", fontFamily: "var(--font-sans)", outline: "none",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-              <Filter size={13} style={{ color: "rgba(102,187,106,0.4)" }} />
-              <select value={animalFilter} onChange={(e) => setAnimalFilter(e.target.value)} style={selectStyle}>
-                <option value="all">All Animals</option>
-                {Object.entries(ANIMAL_ICONS).map(([t, icon]) => (
-                  <option key={t} value={t}>{icon} {t.charAt(0).toUpperCase() + t.slice(1)}</option>
-                ))}
-              </select>
-              <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} style={selectStyle}>
-                <option value="all">All Severities</option>
-                <option value="critical">🔴 Critical</option>
-                <option value="high">🟠 High</option>
-                <option value="medium">🟡 Medium</option>
-                <option value="low">🟢 Low</option>
-              </select>
-            </div>
-          </div>
-
-          {/* ── Cases Feed ────────────────────────────────────── */}
-          {loading ? (
-            <div style={{ textAlign: "center", padding: "60px 0" }}>
-              <div className="spinner-green" />
-              <p style={{ color: "rgba(232,245,233,0.4)", fontSize: "0.875rem", marginTop: "16px" }}>
-                Loading rescue cases...
-              </p>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div style={{
-              background: "rgba(21,35,23,0.3)",
-              border: "1px solid rgba(102,187,106,0.08)",
-              borderRadius: "16px", padding: "60px 24px", textAlign: "center",
-            }}>
-              <Activity size={40} style={{ color: "#66BB6A", opacity: 0.3, marginBottom: "16px" }} />
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, margin: "0 0 8px 0" }}>
-                {user && hasNoLocation ? "Set your location to see cases" : `No Active Cases in Your ${scope === "area" ? "Area" : scope === "city" ? "City" : "State"}`}
-              </h3>
-              <p style={{ color: "rgba(232,245,233,0.4)", fontSize: "0.85rem", margin: "0 0 20px 0" }}>
-                {user && hasNoLocation
-                  ? "Update your profile to start receiving location-specific rescue alerts."
-                  : "Great news! No active animal emergencies in your area right now."}
-              </p>
-              {user && !hasNoLocation && scope !== "state" && (
+            <div style={{ display: "flex", gap: "8px" }}>
+              {(["area", "city", "state"] as LocationScope[]).map((s) => (
                 <button
-                  onClick={() => setScope(scope === "area" ? "city" : "state")}
+                  key={s}
+                  onClick={() => setScope(s)}
                   style={{
-                    background: "rgba(102,187,106,0.1)", border: "1px solid rgba(102,187,106,0.25)",
-                    color: "#A5D6A7", padding: "8px 18px", borderRadius: "8px",
-                    fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
-                    display: "inline-flex", alignItems: "center", gap: "6px",
-                    fontFamily: "var(--font-sans)",
+                    background: scope === s ? "rgba(102,187,106,0.18)" : "rgba(10,16,11,0.5)",
+                    border: `1px solid ${scope === s ? "rgba(102,187,106,0.45)" : "rgba(102,187,106,0.1)"}`,
+                    color: scope === s ? "#A5D6A7" : "rgba(232,245,233,0.45)",
+                    borderRadius: "8px",
+                    padding: "6px 14px",
+                    fontSize: "0.8rem",
+                    fontWeight: scope === s ? 700 : 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    textTransform: "capitalize",
                   }}
                 >
-                  <ChevronDown size={14} /> Expand to {scope === "area" ? "City" : "State"} View
+                  {s === "area" ? `📍 ${userLocation.area_name ?? "My Area"}` : s === "city" ? "🏙 My City" : "🗺 My State"}
                 </button>
-              )}
+              ))}
             </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {/* Count + scope badge */}
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                <span style={{ fontSize: "0.8rem", color: "rgba(232,245,233,0.5)" }}>
-                  {filtered.length} active case{filtered.length !== 1 ? "s" : ""}
-                </span>
-                <span style={{
-                  fontSize: "0.68rem", fontWeight: 700, padding: "2px 8px",
-                  borderRadius: "4px", background: "rgba(102,187,106,0.1)",
-                  border: "1px solid rgba(102,187,106,0.2)", color: "#A5D6A7",
-                }}>
-                  {!user ? "Guest View" : scope === "area" ? "📍 Area" : scope === "city" ? "🏙 City" : "🗺 State"} scope
-                </span>
-              </div>
-
-              {filtered.map((rescue) => {
-                const sev = SEVERITY_COLORS[rescue.emergency_level] ?? { bg: "rgba(255,255,255,0.05)", text: "#E8F5E9" };
-                const stat = STATUS_COLORS[rescue.status] ?? { bg: "rgba(255,255,255,0.05)", text: "#E8F5E9" };
-                const isAssignedToMe = user && rescue.assigned_volunteer_id === user.uid;
-                const isOpen = rescue.status === "open";
-                const dateStr = rescue.created_at
-                  ? new Date(rescue.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
-                  : "recently";
-
-                return (
-                  <div
-                    key={rescue.id}
-                    style={{
-                      background: rescue.emergency_level === "critical"
-                        ? "rgba(30,16,16,0.6)"
-                        : "rgba(21,35,23,0.45)",
-                      backdropFilter: "blur(16px)",
-                      border: rescue.emergency_level === "critical"
-                        ? "1px solid rgba(239,83,80,0.25)"
-                        : isAssignedToMe
-                        ? "1px solid rgba(102,187,106,0.35)"
-                        : "1px solid rgba(102,187,106,0.1)",
-                      borderRadius: "16px",
-                      padding: "22px",
-                      display: "flex", flexDirection: "column", gap: "12px",
-                      transition: "all 0.2s",
-                    }}
-                    className="rescue-card"
-                  >
-                    {/* Header row */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                          <span style={{ fontSize: "1.2rem" }}>{ANIMAL_ICONS[rescue.animal_type ?? "other"] ?? "🐾"}</span>
-                          <h3 style={{ fontSize: "1rem", fontWeight: 700, margin: 0, textTransform: "capitalize" }}>
-                            {rescue.animal_type} Emergency
-                          </h3>
-                          <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "3px 8px", borderRadius: "4px", background: sev.bg, color: sev.text, textTransform: "uppercase" }}>
-                            {rescue.emergency_level}
-                          </span>
-                          <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "3px 8px", borderRadius: "4px", background: stat.bg, color: stat.text, textTransform: "uppercase" }}>
-                            {rescue.status}
-                          </span>
-                        </div>
-                        <p style={{ color: "rgba(232,245,233,0.45)", fontSize: "0.72rem", marginTop: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
-                          <Clock size={11} /> {dateStr}
-                        </p>
-                      </div>
-                      {isAssignedToMe && (
-                        <span style={{ fontSize: "0.7rem", color: "#66BB6A", fontWeight: 700, padding: "4px 10px", background: "rgba(102,187,106,0.12)", borderRadius: "6px", border: "1px solid rgba(102,187,106,0.3)", whiteSpace: "nowrap" }}>
-                          ✅ My Case
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Condition */}
-                    <p style={{ fontSize: "0.875rem", lineHeight: 1.55, color: "rgba(232,245,233,0.85)", margin: 0 }}>
-                      {rescue.condition_summary}
-                    </p>
-
-                    {/* Location */}
-                    <div style={{ borderTop: "1px solid rgba(102,187,106,0.07)", paddingTop: "10px", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", color: "rgba(232,245,233,0.6)" }}>
-                      <MapPin size={13} style={{ color: "#66BB6A", flexShrink: 0 }} />
-                      <span>{rescue.display_zone}</span>
-                    </div>
-
-                    {/* Actions */}
-                    {rescue.status !== "resolved" && rescue.status !== "closed" && (
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
-                        {isAssignedToMe ? (
-                          <div style={{ fontSize: "0.8rem", color: "#A5D6A7", fontWeight: 600, display: "flex", alignItems: "center", gap: "5px" }}>
-                            <CheckCircle size={14} /> You are assigned
-                          </div>
-                        ) : rescue.status === "in_progress" || rescue.status === "assigned" ? (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                            <span style={{ fontSize: "0.78rem", color: "rgba(232,245,233,0.45)", fontWeight: 600 }}>
-                              Assigned to: <strong style={{ color: "#E8F5E9" }}>{volunteerProfiles[rescue.assigned_volunteer_id ?? ""]?.name || "EcoVerse Rescuer"}</strong>
-                            </span>
-                            {volunteerProfiles[rescue.assigned_volunteer_id ?? ""] && (
-                              <span style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                background: volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "rgba(102,187,106,0.12)" : "rgba(255,255,255,0.05)",
-                                border: `1px solid ${volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "rgba(102,187,106,0.3)" : "rgba(255,255,255,0.15)"}`,
-                                color: volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "#66BB6A" : "rgba(232, 245, 233, 0.5)",
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                fontSize: "0.625rem",
-                                fontWeight: 700,
-                              }}>
-                                <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "#66BB6A" : "rgba(232,245,233,0.4)", display: "inline-block" }} />
-                                {volunteerProfiles[rescue.assigned_volunteer_id ?? ""].isActive ? "Active Now" : "Standby"}
-                              </span>
-                            )}
-                          </div>
-                        ) : isOpen ? (
-                          <button
-                            onClick={() => handleAcceptDispatch(rescue.id)}
-                            disabled={!user || submittingCaseId === rescue.id}
-                            style={{
-                              background: !user
-                                ? "rgba(255,255,255,0.06)"
-                                : submittingCaseId === rescue.id
-                                ? "rgba(102,187,106,0.08)"
-                                : "rgba(102,187,106,0.12)",
-                              border: !user
-                                ? "1px solid rgba(255,255,255,0.15)"
-                                : "1px solid rgba(102,187,106,0.25)",
-                              color: !user
-                                ? "rgba(255,255,255,0.5)"
-                                : submittingCaseId === rescue.id
-                                ? "rgba(165,214,167,0.5)"
-                                : "#A5D6A7",
-                              padding: "8px 18px",
-                              borderRadius: "9px", fontWeight: 600,
-                              cursor: !user || submittingCaseId === rescue.id ? "not-allowed" : "pointer",
-                              fontSize: "0.82rem",
-                              fontFamily: "var(--font-sans)", transition: "all 0.15s",
-                              opacity: submittingCaseId === rescue.id ? 0.7 : 1,
-                            }}
-                            className="accept-btn"
-                          >
-                            {!user
-                              ? "🔒 Login to Accept"
-                              : submittingCaseId === rescue.id
-                              ? "Accepting..."
-                              : "Accept Dispatch"}
-                          </button>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          </div>
         </div>
+      )}
+
+      {/* Main Body */}
+      <div className="container" style={{ maxWidth: "1000px", margin: "0 auto", padding: "28px 24px 80px" }}>
+        
+        {/* Warning Banner */}
+        {hasNoLocation && (
+          <div style={{ padding: "16px 20px", background: "rgba(255,167,38,0.08)", border: "1px solid rgba(255,167,38,0.25)", borderRadius: "12px", marginBottom: "24px" }}>
+            <div style={{ fontWeight: 700, color: "#FFA726", fontSize: "0.9rem" }}>Location Zone Not Configured</div>
+            <p style={{ color: "rgba(232,245,233,0.6)", fontSize: "0.82rem", margin: "4px 0 8px" }}>
+              Define your State, City, and Area in your profile to enable strict geographical alerts filtering.
+            </p>
+            <Link href="/profile" style={{ color: "#FFA726", textDecoration: "underline", fontWeight: 700, fontSize: "0.8rem" }}>Set Location Zone →</Link>
+          </div>
+        )}
+
+        {/* Tab Selection */}
+        <div style={{ display: "flex", borderBottom: "1px solid rgba(102,187,106,0.12)", marginBottom: "24px", overflowX: "auto" }}>
+          {[
+            { id: "all", label: "All Cases", count: cases.length },
+            { id: "open", label: "Open", count: openCasesCount },
+            { id: "in_progress", label: "In Progress", count: inProgressCount },
+            { id: "resolved", label: "Resolved", count: resolvedCount },
+            { id: "my_cases", label: "My Cases", count: myCasesCount, hideGuest: true },
+          ].map((tab) => {
+            if (tab.hideGuest && !user) return null;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: active ? "2px solid #66BB6A" : "2px solid transparent",
+                  color: active ? "#66BB6A" : "rgba(232,245,233,0.55)",
+                  padding: "12px 18px",
+                  fontSize: "0.9rem",
+                  fontWeight: active ? 700 : 500,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontFamily: "var(--font-sans)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {tab.label}
+                <span style={{ fontSize: "0.75rem", background: "rgba(102,187,106,0.1)", color: "#A5D6A7", padding: "1px 6px", borderRadius: "8px" }}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Filter Controls */}
+        <div style={{ background: "rgba(21,35,23,0.45)", border: "1px solid rgba(102,187,106,0.1)", borderRadius: "14px", padding: "16px", marginBottom: "24px", display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
+            <Search size={15} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "rgba(102,187,106,0.4)" }} />
+            <input
+              type="text"
+              placeholder="Search by animal, conditions, location..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                background: "rgba(10,16,11,0.6)",
+                border: "1px solid rgba(102,187,106,0.18)",
+                borderRadius: "8px",
+                padding: "8px 12px 8px 34px",
+                color: "#E8F5E9",
+                fontSize: "0.85rem",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+            <Filter size={13} style={{ color: "rgba(102,187,106,0.4)" }} />
+            <select
+              value={animalFilter}
+              onChange={(e) => setAnimalFilter(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="all">All Animals</option>
+              <option value="dog">🐕 Dogs</option>
+              <option value="cat">🐈 Cats</option>
+              <option value="cow">🐄 Cattle</option>
+              <option value="bird">🐦 Birds</option>
+              <option value="pigeon">🕊️ Pigeons</option>
+            </select>
+
+            <select
+              value={severityFilter}
+              onChange={(e) => setSeverityFilter(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="all">All Severities</option>
+              <option value="critical">🔴 Critical</option>
+              <option value="high">🟠 High</option>
+              <option value="medium">🟡 Medium</option>
+              <option value="low">🟢 Low</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Rescue Feed */}
+        {loading ? (
+          <div style={{ textAlign: "center", padding: "60px 0" }}>
+            <div className="spinner-green" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            emoji="🐾"
+            title="No rescue cases yet."
+            subtitle="Be the first to report an emergency or respond."
+            ctaText="🚨 Report SOS Case"
+            onClick={() => setShowSosModal(true)}
+          />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {filtered.map((rescue) => (
+              <CaseCard
+                key={rescue.id}
+                rescueCase={rescue}
+                currentUserId={user?.uid}
+                onAccept={() => handleAcceptDispatch(rescue.id)}
+                isAccepting={submittingCaseId === rescue.id}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       <Footer />
 
+      {/* SOS Modal Overlay */}
+      {showSosModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(5, 15, 7, 0.95)",
+            backdropFilter: "blur(12px)",
+            zIndex: 1100,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "520px",
+              background: "#111f13",
+              border: "1px solid rgba(102,187,106,0.25)",
+              borderRadius: "20px",
+              padding: "28px",
+              boxShadow: "0 24px 48px rgba(0,0,0,0.6)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <h3 style={{ fontSize: "1.25rem", fontWeight: 800, color: "#EF5350", margin: 0 }}>
+                  🚨 Report SOS Emergency
+                </h3>
+                <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.4)" }}>
+                  Step {sosStep} of 5
+                </span>
+              </div>
+              <button
+                onClick={() => setShowSosModal(false)}
+                style={{
+                  background: "rgba(102,187,106,0.08)",
+                  border: "none",
+                  color: "#A5D6A7",
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "50%",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSosSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              
+              {/* Step 1: Location Cascade */}
+              {sosStep === 1 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <label style={labelStyle}>Select Emergency Zone *</label>
+                  <LocationPicker onChange={(sel) => setSosLocation(sel)} required={true} compact={true} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
+                    <label style={labelStyle}>Specific Landmark / Address *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Near Metro Pillar 12, Banjara Hills"
+                      value={sosAddress}
+                      onChange={(e) => setSosAddress(e.target.value)}
+                      required
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Animal Details */}
+              {sosStep === 2 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={labelStyle}>Animal Type *</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                      {[
+                        { id: "dog", label: "Dog", emoji: "🐕" },
+                        { id: "cat", label: "Cat", emoji: "🐈" },
+                        { id: "cow", label: "Cow", emoji: "🐄" },
+                        { id: "bird", label: "Bird", emoji: "🐦" },
+                        { id: "other", label: "Other", emoji: "🐾" },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setSosAnimal(item.id)}
+                          style={{
+                            background: sosAnimal === item.id ? "rgba(102,187,106,0.2)" : "rgba(10,16,11,0.6)",
+                            border: `1px solid ${sosAnimal === item.id ? "rgba(102,187,106,0.5)" : "rgba(102,187,106,0.15)"}`,
+                            borderRadius: "8px",
+                            padding: "8px 14px",
+                            color: "#FFFFFF",
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          {item.emoji} {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={labelStyle}>Condition Summary *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Dog with bleeding hind leg, unable to stand"
+                      value={sosCondition}
+                      onChange={(e) => setSosCondition(e.target.value)}
+                      required
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Emergency Level */}
+              {sosStep === 3 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <label style={labelStyle}>Select Severity Level *</label>
+                  {[
+                    { id: "low", label: "Low", desc: "Minor scratch, active but needs check", icon: "🟢", color: "#A5D6A7" },
+                    { id: "medium", label: "Medium", desc: "Limping, skin disease, minor infection", icon: "🟡", color: "#FFE082" },
+                    { id: "high", label: "High", desc: "Severe bleeding, open bone fracture", icon: "🟠", color: "#FFA726" },
+                    { id: "critical", label: "Critical", desc: "Life-threatening shock, unconscious", icon: "🔴", color: "#EF5350" },
+                  ].map((level) => (
+                    <button
+                      key={level.id}
+                      type="button"
+                      onClick={() => setSosSeverity(level.id as any)}
+                      style={{
+                        background: sosSeverity === level.id ? "rgba(102,187,106,0.1)" : "rgba(10,16,11,0.4)",
+                        border: `1px solid ${sosSeverity === level.id ? level.color : "rgba(102,187,106,0.12)"}`,
+                        borderRadius: "10px",
+                        padding: "12px 16px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        color: sosSeverity === level.id ? level.color : "#FFFFFF",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div>
+                        <strong>{level.icon} {level.label}</strong>
+                        <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.4)", marginTop: "2px" }}>
+                          {level.desc}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Step 4: Photo upload simulator */}
+              {sosStep === 4 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <label style={labelStyle}>Photo Upload (Optional)</label>
+                  <div
+                    style={{
+                      border: "2px dashed rgba(102,187,106,0.25)",
+                      borderRadius: "12px",
+                      padding: "32px 16px",
+                      textAlign: "center",
+                      background: "rgba(10,16,11,0.4)",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => toast.success("Photo upload simulator activated")}
+                  >
+                    <Upload size={32} style={{ color: "#66BB6A", margin: "0 auto 12px", opacity: 0.7 }} />
+                    <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)" }}>
+                      Drag and drop files here, or click to upload
+                    </span>
+                    <span style={{ display: "block", fontSize: "0.7rem", color: "rgba(255,255,255,0.3)", marginTop: "4px" }}>
+                      Max size: 5MB (PNG, JPG)
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 5: Confirm & Contact */}
+              {sosStep === 5 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={labelStyle}>Your Phone Number *</label>
+                    <input
+                      type="tel"
+                      placeholder="+91 XXXXX XXXXX"
+                      value={sosPhone}
+                      onChange={(e) => setSosPhone(e.target.value)}
+                      required
+                      style={inputStyle}
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={labelStyle}>Incident Description (Optional)</label>
+                    <textarea
+                      placeholder="Add any extra details..."
+                      rows={3}
+                      value={sosDesc}
+                      onChange={(e) => setSosDesc(e.target.value)}
+                      style={{ ...inputStyle, resize: "none" }}
+                    />
+                  </div>
+
+                  {/* Warning summary */}
+                  <div style={{ display: "flex", gap: "8px", background: "rgba(239,83,80,0.06)", border: "1px solid rgba(239,83,80,0.2)", padding: "10px", borderRadius: "8px", fontSize: "0.75rem", color: "#EF9A9A" }}>
+                    <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: "2px" }} />
+                    <div>
+                      This alert will dispatch to verified volunteers in{" "}
+                      <strong>{sosLocation?.areaName || "the chosen area"}</strong>. Make sure details are accurate.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Controls */}
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "12px", gap: "10px" }}>
+                {sosStep > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setSosStep(sosStep - 1)}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(102,187,106,0.3)",
+                      color: "#A5D6A7",
+                      padding: "10px 20px",
+                      borderRadius: "8px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    ← Back
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                {sosStep < 5 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (sosStep === 1 && (!sosLocation || !sosAddress.trim())) {
+                        return toast.error("Please fill in location and address");
+                      }
+                      if (sosStep === 2 && !sosCondition.trim()) {
+                        return toast.error("Please fill in condition summary");
+                      }
+                      setSosStep(sosStep + 1);
+                    }}
+                    style={{
+                      background: "linear-gradient(135deg, #2E7D32 0%, #66BB6A 100%)",
+                      color: "#FFFFFF",
+                      border: "none",
+                      padding: "10px 24px",
+                      borderRadius: "8px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    Next →
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={sosSubmitting}
+                    style={{
+                      background: "linear-gradient(135deg, #EF5350 0%, #C62828 100%)",
+                      color: "#FFFFFF",
+                      border: "none",
+                      padding: "10px 24px",
+                      borderRadius: "8px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      fontSize: "0.85rem",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    {sosSubmitting ? "Dispatching..." : "Submit 🚨"}
+                  </button>
+                )}
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
       <style>{`
         .spinner-green {
-          width: 36px; height: 36px;
+          width: 32px; height: 32px;
           border: 3px solid rgba(102,187,106,0.15);
           border-radius: 50%;
           border-top-color: #66BB6A;
           animation: spin 0.8s linear infinite;
-          margin: 0 auto;
+          margin: 40px auto;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .rescue-card:hover {
-          border-color: rgba(102,187,106,0.22) !important;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        }
-        .accept-btn:hover {
-          background: #388E3C !important;
-          color: #FFFFFF !important;
-          border-color: #388E3C !important;
-          box-shadow: 0 4px 12px rgba(46,125,50,0.2);
-        }
       `}</style>
     </div>
   );
@@ -679,13 +785,31 @@ export default function RescuePage() {
 const selectStyle: React.CSSProperties = {
   background: "rgba(10,16,11,0.6)",
   border: "1px solid rgba(102,187,106,0.18)",
-  borderRadius: "9px",
-  padding: "8px 14px",
+  borderRadius: "8px",
+  padding: "8px 12px",
   color: "#E8F5E9",
   fontSize: "0.8rem",
   fontWeight: 600,
-  fontFamily: "var(--font-sans)",
   outline: "none",
   cursor: "pointer",
 };
 
+const labelStyle: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 700,
+  color: "rgba(232, 245, 233, 0.7)",
+  textTransform: "uppercase",
+  letterSpacing: "0.02em",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "rgba(10, 16, 11, 0.6)",
+  border: "1px solid rgba(102, 187, 106, 0.22)",
+  borderRadius: "8px",
+  padding: "10px 12px",
+  color: "#FFFFFF",
+  fontSize: "0.88rem",
+  outline: "none",
+  boxSizing: "border-box",
+};

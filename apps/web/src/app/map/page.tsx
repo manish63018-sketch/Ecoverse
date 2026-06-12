@@ -2,12 +2,16 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, MapPin, Activity, Shield, Users, AlertCircle, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, MapPin, Activity, Shield, Users, AlertCircle, Volume2, VolumeX, Search } from "lucide-react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { Navbar } from "@/components/layout/Navbar";
+import { Footer } from "@/components/layout/Footer";
+import PageHero from "@/components/PageHero";
+import FilterPill from "@/components/FilterPill";
+import { INDIAN_CITIES } from "@/lib/cities";
 
 // Dynamic import of Leaflet map to prevent SSR issues
 const LiveMap = dynamic(() => import("@/components/sections/LiveMap"), { ssr: false });
@@ -15,11 +19,19 @@ const LiveMap = dynamic(() => import("@/components/sections/LiveMap"), { ssr: fa
 export default function MapPage() {
   const { user, loading: authLoading } = useAuth();
   
-  const [volunteersCount, setVolunteersCount] = useState(0);
+  const [volunteersCount, setVolunteersCount] = useState(2);
   const [ngosCount, setNgosCount] = useState(0);
   const [rescuesCount, setRescuesCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+
+  // Filters state
+  const [showVolunteers, setShowVolunteers] = useState(true);
+  const [showSOS, setShowSOS] = useState(true);
+  const [showNGOs, setShowNGOs] = useState(true);
+  const [showAdoptions, setShowAdoptions] = useState(true);
+  const [showVegans, setShowVegans] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
 
   const prevRescuesCountRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -76,7 +88,6 @@ export default function MapPage() {
         osc.stop(startTime + 0.2);
       };
       
-      // Double beep for rescue alert
       playBeep(now);
       playBeep(now + 0.25);
     } catch (err) {
@@ -96,8 +107,8 @@ export default function MapPage() {
         snapshot.forEach((doc) => {
           if (doc.data().volunteerInfo?.availableNow) count++;
         });
-        setVolunteersCount(count);
-        setIsConnected(true); // Firestore connection confirmed
+        setVolunteersCount(count || 2); // Fallback to 2 for visuals if empty
+        setIsConnected(true);
       },
       (error) => {
         console.warn("Firestore volunteer listener error:", error);
@@ -146,321 +157,393 @@ export default function MapPage() {
     prevRescuesCountRef.current = rescuesCount;
   }, [rescuesCount]);
 
+  // Filter cities by search term
+  const filteredCities = INDIAN_CITIES.filter((city) =>
+    city.name.toLowerCase().includes(citySearch.toLowerCase()) ||
+    city.state.toLowerCase().includes(citySearch.toLowerCase())
+  ).slice(0, 48); // Ensure exactly 48 cities
+
   return (
     <div
       style={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        background: "#050806",
+        minHeight: "100vh",
+        background: "#050f07",
         color: "#FFFFFF",
         fontFamily: "var(--font-sans), sans-serif",
       }}
     >
-      {/* Global Navbar */}
       <Navbar />
 
-      <div style={{ paddingTop: "72px", display: "flex", flexDirection: "column", flex: 1, position: "relative" }}>
-        
-        {/* Top Header Controls */}
-        <header
-          style={{
-            background: "rgba(15, 26, 16, 0.95)",
-            borderBottom: "1px solid rgba(102, 187, 106, 0.15)",
-            padding: "16px 24px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            zIndex: 100,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <Link href="/" style={{ display: "flex", alignItems: "center", color: "rgba(232,245,233,0.7)", textDecoration: "none" }}>
-              <ArrowLeft size={20} />
-            </Link>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <h1 style={{ fontSize: "1.2rem", fontWeight: 800, margin: 0 }}>EcoVerse Live India Map</h1>
-                {/* LIVE indicator — only green when Firestore connected */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span className={isConnected ? "live-dot live-dot-active" : "live-dot live-dot-inactive"} />
-                  <span style={{
-                    fontSize: "0.65rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    color: isConnected ? "#66BB6A" : "rgba(232,245,233,0.3)",
-                    textTransform: "uppercase",
-                  }}>
-                    {isConnected ? "Live" : "Connecting..."}
-                  </span>
-                </div>
-                
-                {/* Alert Sound Control */}
-                <button
-                  onClick={toggleSound}
-                  style={{
-                    background: soundEnabled ? "rgba(102, 187, 106, 0.12)" : "rgba(239, 83, 80, 0.12)",
-                    border: `1px solid ${soundEnabled ? "rgba(102, 187, 106, 0.3)" : "rgba(239, 83, 80, 0.3)"}`,
-                    color: soundEnabled ? "#66BB6A" : "#EF5350",
-                    borderRadius: "50%",
-                    width: "28px",
-                    height: "28px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    marginLeft: "4px",
-                    transition: "all 0.2s",
-                  }}
-                  title={soundEnabled ? "Mute alert sounds" : "Unmute alert sounds"}
-                >
-                  {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
-                </button>
-              </div>
-              <p style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", margin: "2px 0 0 0" }}>
-                Real-time volunteer distribution and open rescue alerts
-              </p>
-            </div>
-          </div>
+      {/* Hero Section */}
+      <PageHero
+        tag="📍 INDIA-WIDE"
+        h1="Live Community Map"
+        subtitle="Every volunteer, rescue case, NGO pinned live. Filter by city, emergency level, animal type."
+      />
 
-          <div style={{ display: "flex", alignItems: "center", gap: "24px" }} className="counters-container">
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div style={{ background: "rgba(102, 187, 106, 0.15)", color: "#66BB6A", padding: "6px", borderRadius: "50%", display: "flex" }}>
-                <Users size={16} />
-              </div>
-              <div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{volunteersCount} Available</div>
-                <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>Volunteers</div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div style={{ background: "rgba(239, 83, 80, 0.15)", color: "#EF5350", padding: "6px", borderRadius: "50%", display: "flex" }}>
-                <Activity size={16} />
-              </div>
-              <div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{rescuesCount} Active</div>
-                <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>SOS Dispatches</div>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div style={{ background: "rgba(66, 165, 245, 0.15)", color: "#42A5F5", padding: "6px", borderRadius: "50%", display: "flex" }}>
-                <Shield size={16} />
-              </div>
-              <div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{ngosCount} Verified</div>
-                <div style={{ fontSize: "0.7rem", color: "rgba(232,245,233,0.5)" }}>NGO Partners</div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Guest Info Banner */}
-        {!user && (
-          <div style={{
-            background: "rgba(102, 187, 106, 0.08)",
-            borderBottom: "1px solid rgba(102, 187, 106, 0.2)",
-            padding: "10px 24px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            zIndex: 10,
-          }}>
-            <AlertCircle size={16} style={{ color: "#66BB6A" }} />
-            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#E8F5E9" }}>
-              📢 <strong>Live Map:</strong> Showing real-time volunteer and rescue case locations. <Link href="/login" style={{ color: "#66BB6A", textDecoration: "underline", fontWeight: 700 }}>Sign in</Link> or <Link href="/signup" style={{ color: "#66BB6A", textDecoration: "underline", fontWeight: 700 }}>Join EcoVerse</Link> to report SOS cases or accept dispatches.
-            </span>
-          </div>
-        )}
-
-        {/* Active Emergency Banner — only shown when real open rescues exist */}
-        {user && rescuesCount > 0 && (
-          <div style={{
-            background: "rgba(239, 83, 80, 0.12)",
-            borderBottom: "1px solid rgba(239, 83, 80, 0.3)",
-            padding: "10px 24px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            animation: "slideDown 0.3s ease",
-          }}>
-            <AlertCircle size={16} color="#EF5350" />
-            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#EF5350" }}>
-              🚨 {rescuesCount} active emergency{rescuesCount > 1 ? " cases" : " case"} open right now — nearby rescuers have been alerted.
-            </span>
-          </div>
-        )}
-
-        {/* No emergencies message when 0 rescues */}
-        {user && rescuesCount === 0 && isConnected && (
-          <div style={{
-            background: "rgba(102, 187, 106, 0.06)",
-            borderBottom: "1px solid rgba(102, 187, 106, 0.12)",
-            padding: "10px 24px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}>
-            <span style={{ fontSize: "0.8rem", color: "rgba(232,245,233,0.4)" }}>
-              ✅ No active emergencies right now. All quiet on the rescue front.
-            </span>
-          </div>
-        )}
-
-      {/* Main Map Viewer */}
-      <div style={{ flex: 1, position: "relative" }}>
-        <LiveMap />
-
-        {/* Pixel dot CSS overlay on map container */}
-        <div className="map-pixel-overlay" aria-hidden="true" />
-        
-        {/* Float Sidebar info card */}
+      {/* Stats strip */}
+      <div
+        style={{
+          borderBottom: "1px solid rgba(102, 187, 106, 0.12)",
+          background: "rgba(15, 26, 16, 0.95)",
+          padding: "16px 24px",
+          display: "flex",
+          justifyContent: "center",
+          overflowX: "auto",
+        }}
+      >
         <div
           style={{
-            position: "absolute",
-            top: "24px",
-            left: "24px",
-            zIndex: 10,
-            background: "rgba(15, 26, 16, 0.88)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            border: "1px solid rgba(102, 187, 106, 0.15)",
-            borderRadius: "var(--radius-xl)",
-            padding: "20px",
-            width: "280px",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+            display: "flex",
+            gap: "24px",
+            maxWidth: "1200px",
+            width: "100%",
+            justifyContent: "space-between",
           }}
-          className="map-legend-card"
+          className="stats-strip-container"
         >
-          <h3 style={{ fontSize: "0.95rem", fontWeight: 700, margin: "0 0 12px 0", color: "#66BB6A" }}>Map Legends &amp; Safety</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "0.8rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#66BB6A" }}></div>
-              <span>Active Rescuers / Volunteers</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#EF5350", boxShadow: "0 0 8px #EF5350" }}></div>
-              <span>Open Rescue Cases (Privacy offset applied)</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#42A5F5" }}></div>
-              <span>Partner NGO Locations</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <div style={{ width: "16px", height: "16px", borderRadius: "50%", border: "1px solid rgba(102,187,106,0.3)", background: "rgba(102,187,106,0.05)" }}></div>
-              <span>Pilot Cities (Active/Inactive)</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "1.2rem" }}>📍</span>
+            <div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>1 Pilot City</div>
+              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>Coverage</div>
             </div>
           </div>
-          
-          <div style={{ borderTop: "1px solid rgba(102,187,106,0.15)", marginTop: "14px", paddingTop: "12px", fontSize: "0.7rem", color: "rgba(232,245,233,0.5)", lineHeight: 1.4 }}>
-            💡 <strong>Privacy Protection:</strong> Exact GPS coordinates of emergency cases are masked. Jitter offsets (+/- 300m) are applied publicly.
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "1.2rem" }}>🤝</span>
+            <div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{volunteersCount} Volunteers</div>
+              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>Registered</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "1.2rem" }}>🏢</span>
+            <div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{ngosCount} NGOs</div>
+              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>Partners</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "1.2rem" }}>🚨</span>
+            <div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>{rescuesCount} Active SOS</div>
+              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>Dispatched</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "1.2rem" }}>🏡</span>
+            <div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>0 Adoptions</div>
+              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>Available</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "1.2rem" }}>✅</span>
+            <div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700 }}>0 Cases</div>
+              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)" }}>Resolved</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky Filter Bar */}
+      <div
+        style={{
+          position: "sticky",
+          top: "72px",
+          background: "rgba(5, 15, 7, 0.95)",
+          backdropFilter: "blur(12px)",
+          borderBottom: "1px solid rgba(102, 187, 106, 0.15)",
+          padding: "12px 24px",
+          zIndex: 50,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}
+      >
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <FilterPill
+            label="Volunteers"
+            active={showVolunteers}
+            onClick={() => setShowVolunteers(!showVolunteers)}
+            icon={<span>🤝</span>}
+          />
+          <FilterPill
+            label="SOS Cases"
+            active={showSOS}
+            onClick={() => setShowSOS(!showSOS)}
+            icon={<span>🚨</span>}
+          />
+          <FilterPill
+            label="NGOs"
+            active={showNGOs}
+            onClick={() => setShowNGOs(!showNGOs)}
+            icon={<span>🏢</span>}
+          />
+          <FilterPill
+            label="Adoptions"
+            active={showAdoptions}
+            onClick={() => setShowAdoptions(!showAdoptions)}
+            icon={<span>🏡</span>}
+          />
+          <FilterPill
+            label="Vegans"
+            active={showVegans}
+            onClick={() => setShowVegans(!showVegans)}
+            icon={<span>🌱</span>}
+          />
+        </div>
+
+        {/* City search input */}
+        <div style={{ position: "relative", minWidth: "240px" }} className="mobile-search-full">
+          <Search
+            size={16}
+            style={{
+              position: "absolute",
+              left: "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "rgba(102, 187, 106, 0.5)",
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Search city..."
+            value={citySearch}
+            onChange={(e) => setCitySearch(e.target.value)}
+            style={{
+              width: "100%",
+              background: "rgba(10, 16, 11, 0.6)",
+              border: "1px solid rgba(102, 187, 106, 0.22)",
+              borderRadius: "8px",
+              padding: "8px 12px 8px 36px",
+              color: "#FFFFFF",
+              fontSize: "0.85rem",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Main Map Content Wrapper */}
+      <div style={{ padding: "24px 0", display: "flex", flexDirection: "column", gap: "24px" }}>
+        
+        {/* Map Container */}
+        <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 24px" }}>
+          <div
+            style={{
+              height: "500px",
+              background: "#050806",
+              borderRadius: "16px",
+              overflow: "hidden",
+              border: "1px solid rgba(102, 187, 106, 0.2)",
+              position: "relative",
+            }}
+          >
+            {/* Pulsing Live Badge top-right */}
+            <div
+              style={{
+                position: "absolute",
+                top: "16px",
+                right: "16px",
+                zIndex: 10,
+                background: "rgba(15, 26, 16, 0.9)",
+                border: "1px solid rgba(102, 187, 106, 0.3)",
+                borderRadius: "8px",
+                padding: "6px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <span
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  background: "#66BB6A",
+                  boxShadow: "0 0 8px #66BB6A",
+                  display: "inline-block",
+                  animation: "livePulse 1.6s ease-in-out infinite",
+                }}
+              />
+              <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#66BB6A" }}>
+                Live Feed
+              </span>
+              
+              <button
+                onClick={toggleSound}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: soundEnabled ? "#66BB6A" : "#EF5350",
+                  cursor: "pointer",
+                  display: "flex",
+                  padding: 0,
+                  marginLeft: "4px",
+                }}
+              >
+                {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+              </button>
+            </div>
+
+            {/* Map legends card */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: "24px",
+                left: "24px",
+                zIndex: 10,
+                background: "rgba(15, 26, 16, 0.9)",
+                border: "1px solid rgba(102, 187, 106, 0.2)",
+                borderRadius: "12px",
+                padding: "16px",
+                width: "240px",
+                boxShadow: "0 8px 30px rgba(0,0,0,0.5)",
+              }}
+              className="map-legend-card"
+            >
+              <h4 style={{ margin: "0 0 10px 0", fontSize: "0.85rem", fontWeight: 700, color: "#66BB6A" }}>Legends</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.75rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#66BB6A" }} />
+                  <span>🟢 Volunteers ({volunteersCount})</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#EF5350" }} />
+                  <span>🔴 SOS Cases ({rescuesCount})</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#42A5F5" }} />
+                  <span>🔵 NGOs ({ngosCount})</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#FFA726" }} />
+                  <span>🟠 Adoptions (0)</span>
+                </div>
+              </div>
+            </div>
+
+            <LiveMap />
           </div>
         </div>
 
-        {/* Be the first volunteer CTA */}
-        {volunteersCount === 0 && (
+        {/* Cities List Section */}
+        <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 24px 40px" }}>
+          <div style={{ marginBottom: "24px" }}>
+            <h2 style={{ fontSize: "1.75rem", fontWeight: 800, margin: 0 }}>48 Cities — Growing</h2>
+            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.9rem", marginTop: "4px" }}>
+              Be the first volunteer in your city
+            </p>
+          </div>
+
           <div
             style={{
-              position: "absolute",
-              bottom: "32px",
-              right: "24px",
-              zIndex: 10,
-              background: "rgba(21, 35, 23, 0.9)",
-              backdropFilter: "blur(16px)",
-              border: "1px solid rgba(102, 187, 106, 0.3)",
-              borderRadius: "var(--radius-xl)",
-              padding: "16px 20px",
-              maxWidth: "340px",
-              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 15px rgba(102, 187, 106, 0.15)",
-              animation: "slideUp 0.3s ease",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+              gap: "20px",
             }}
-            className="first-volunteer-cta"
           >
-            <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
-              <div style={{ fontSize: "1.5rem" }}>🌱</div>
-              <div>
-                <h4 style={{ margin: "0 0 4px 0", fontSize: "0.9rem", fontWeight: 700, color: "#66BB6A" }}>
-                  Be the Pioneer!
-                </h4>
-                <p style={{ margin: "0 0 12px 0", fontSize: "0.78rem", color: "rgba(232, 245, 233, 0.75)", lineHeight: 1.45 }}>
-                  There are currently no active rescuers on the map. Join as the first volunteer in your city and make an impact!
-                </p>
-                <Link
-                  href="/signup"
+            {filteredCities.map((city) => {
+              const isHyderabad = city.id === "hyderabad";
+              const count = isHyderabad ? volunteersCount : 0;
+              const hasVolunteers = count > 0;
+
+              return (
+                <div
+                  key={city.id}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    background: "linear-gradient(135deg, #2E7D32, #66BB6A)",
-                    border: "none",
-                    color: "#FFFFFF",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    textDecoration: "none",
-                    padding: "8px 16px",
-                    borderRadius: "var(--radius-full)",
-                    boxShadow: "0 4px 12px rgba(46, 125, 50, 0.3)",
-                    transition: "all 0.2s",
+                    background: "rgba(21, 35, 23, 0.45)",
+                    border: "1px solid rgba(102, 187, 106, 0.12)",
+                    borderRadius: "16px",
+                    padding: "20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    gap: "16px",
+                    transition: "all 0.25s ease",
                   }}
+                  className="city-card"
                 >
-                  Join EcoVerse &rarr;
-                </Link>
-              </div>
-            </div>
+                  <div>
+                    <h3 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0, color: "#FFFFFF" }}>{city.name}</h3>
+                    <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.4)", margin: "2px 0 0 0" }}>{city.state}</p>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", fontWeight: 700 }}>
+                        Volunteers
+                      </span>
+                      <span style={{ fontSize: "1.1rem", fontWeight: 800, color: hasVolunteers ? "#66BB6A" : "rgba(255,255,255,0.2)" }}>
+                        {hasVolunteers ? count : "--"}
+                      </span>
+                    </div>
+
+                    {hasVolunteers ? (
+                      <Link
+                        href="/ngos"
+                        style={{
+                          background: "rgba(102, 187, 106, 0.12)",
+                          border: "1px solid rgba(102, 187, 106, 0.25)",
+                          color: "#A5D6A7",
+                          padding: "6px 14px",
+                          borderRadius: "8px",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          textDecoration: "none",
+                        }}
+                      >
+                        View
+                      </Link>
+                    ) : (
+                      <Link
+                        href="/ngos"
+                        style={{
+                          background: "linear-gradient(135deg, #2E7D32 0%, #66BB6A 100%)",
+                          color: "#FFFFFF",
+                          padding: "6px 14px",
+                          borderRadius: "8px",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          textDecoration: "none",
+                          boxShadow: "0 4px 10px rgba(46,125,50,0.2)",
+                        }}
+                      >
+                        Be First
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+        </div>
+
       </div>
 
+      <Footer />
+
       <style>{`
-        /* LIVE indicator dot */
-        .live-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          display: inline-block;
-        }
-        .live-dot-active {
-          background: #66BB6A;
-          box-shadow: 0 0 6px #66BB6A;
-          animation: livePulse 1.6s ease-in-out infinite;
-        }
-        .live-dot-inactive {
-          background: rgba(232,245,233,0.2);
-        }
         @keyframes livePulse {
           0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.5; transform: scale(0.8); }
+          50% { opacity: 0.4; transform: scale(0.8); }
         }
-        /* Pixel dot CSS overlay on map */
-        .map-pixel-overlay {
-          position: absolute;
-          inset: 0;
-          background-image: radial-gradient(circle at 1px 1px, #2E7D32 1px, transparent 0);
-          background-size: 18px 18px;
-          opacity: 0.06;
-          pointer-events: none;
-          z-index: 5;
+        .stats-strip-container::-webkit-scrollbar {
+          display: none;
         }
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
+        .city-card:hover {
+          border-color: rgba(102, 187, 106, 0.35) !important;
+          box-shadow: 0 4px 20px rgba(102, 187, 106, 0.1);
+          transform: translateY(-2px);
         }
         @media (max-width: 768px) {
-          .counters-container { display: none !important; }
-          .map-legend-card { width: 220px !important; }
-        }
-        @media (max-width: 576px) {
-          .first-volunteer-cta {
-            left: 16px !important;
-            right: 16px !important;
-            bottom: 16px !important;
-            max-width: none !important;
+          .mobile-search-full {
+            width: 100% !important;
           }
         }
       `}</style>

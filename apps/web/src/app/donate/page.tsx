@@ -1,458 +1,529 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Heart, Eye, Stethoscope, HandHeart, TrendingUp, CheckCircle, ArrowRight } from "lucide-react";
-import { db } from "@/lib/firebase";
-import {
-  collection,
-  getCountFromServer,
-  query,
-  where,
-} from "firebase/firestore";
+import { Heart, CheckCircle, ArrowRight, ShieldCheck, HeartHandshake, FileText, AlertCircle, Info, Sparkles } from "lucide-react";
+import toast from "react-hot-toast";
+import PageHero from "@/components/PageHero";
 
-// ── AdSense Component ─────────────────────────────────────────────
-declare global {
-  interface Window {
-    adsbygoogle: unknown[];
-  }
+interface Donor {
+  name: string;
+  amount: number;
+  time: string;
 }
-
-function AdSenseAd() {
-  const pushed = useRef(false);
-  useEffect(() => {
-    if (pushed.current) return;
-    pushed.current = true;
-    try {
-      (window.adsbygoogle = window.adsbygoogle || []).push({});
-    } catch (e) {
-      console.error("AdSense error:", e);
-    }
-  }, []);
-
-  return (
-    <div
-      style={{
-        margin: "40px auto",
-        maxWidth: "800px",
-        borderRadius: "16px",
-        overflow: "hidden",
-        background: "rgba(21, 35, 23, 0.4)",
-        border: "1px solid rgba(102,187,106,0.12)",
-        padding: "10px 0 6px",
-        textAlign: "center",
-      }}
-    >
-      <p style={{ fontSize: "0.65rem", color: "rgba(232,245,233,0.25)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>
-        Sponsored — Revenue funds animal care
-      </p>
-      <ins
-        className="adsbygoogle"
-        style={{ display: "block" }}
-        data-ad-client="ca-pub-8150181705727957"
-        data-ad-slot="7016537317"
-        data-ad-format="auto"
-        data-full-width-responsive="true"
-      />
-    </div>
-  );
-}
-
-// ── Live stats hook ───────────────────────────────────────────────
-interface LiveStats {
-  totalRescues: number;
-  resolvedRescues: number;
-  volunteers: number;
-  registeredUsers: number;
-  loading: boolean;
-}
-
-function useLiveStats(): LiveStats {
-  const [stats, setStats] = useState<LiveStats>({
-    totalRescues: 0,
-    resolvedRescues: 0,
-    volunteers: 0,
-    registeredUsers: 0,
-    loading: true,
-  });
-
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        const [
-          totalRescuesSnap,
-          resolvedRescuesSnap,
-          volunteersSnap,
-          usersSnap,
-        ] = await Promise.all([
-          // Total rescue cases reported
-          getCountFromServer(collection(db, "rescues")),
-          // Resolved / helped animals
-          getCountFromServer(query(collection(db, "rescues"), where("status", "==", "resolved"))),
-          // Volunteers registered
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"))),
-          // All registered users
-          getCountFromServer(collection(db, "users")),
-        ]);
-
-        setStats({
-          totalRescues: totalRescuesSnap.data().count,
-          resolvedRescues: resolvedRescuesSnap.data().count,
-          volunteers: volunteersSnap.data().count,
-          registeredUsers: usersSnap.data().count,
-          loading: false,
-        });
-      } catch (err) {
-        console.error("Failed to fetch live stats:", err);
-        setStats(prev => ({ ...prev, loading: false }));
-      }
-    }
-    fetchStats();
-  }, []);
-
-  return stats;
-}
-
-// ── How it works steps ────────────────────────────────────────────
-const HOW_IT_WORKS = [
-  {
-    step: "01",
-    title: "You visit Ecoverse",
-    desc: "Every page view on our platform counts. Reading guides, browsing the rescue map, or checking NGO listings — it all helps.",
-    icon: <Eye size={22} />,
-  },
-  {
-    step: "02",
-    title: "Ads are shown",
-    desc: "Google AdSense displays responsible, relevant ads to visitors. We carefully review ad content to keep the experience clean.",
-    icon: <TrendingUp size={22} />,
-  },
-  {
-    step: "03",
-    title: "Revenue is collected",
-    desc: "100% of ad revenue generated on Ecoverse is ring-fenced exclusively for animal welfare — not for server costs, salaries, or anything else.",
-    icon: <HandHeart size={22} />,
-  },
-  {
-    step: "04",
-    title: "Animals get treated",
-    desc: "Funds are disbursed directly to partner vet clinics for treatments: wound care, fracture splinting, de-worming, and emergency surgery.",
-    icon: <Stethoscope size={22} />,
-  },
-];
-
-// ── What funds cover ──────────────────────────────────────────────
-const FUND_USES = [
-  "Emergency wound stitching & bandaging",
-  "Fracture splinting & bone repair",
-  "Rabies & distemper vaccinations",
-  "Deworming & tick/flea treatments",
-  "IV fluids for heat stroke & dehydration",
-  "Post-surgery recovery care & food",
-  "Sterilization (ABC) programme support",
-  "Transport to vet clinics for critical cases",
-];
 
 export default function DonatePage() {
-  const [hoveredStat, setHoveredStat] = useState<number | null>(null);
-  const liveStats = useLiveStats();
+  const [donateType, setDonateType] = useState<"one_time" | "monthly">("one_time");
+  const [amount, setAmount] = useState<number>(250);
+  const [customActive, setCustomActive] = useState(false);
+  const [customVal, setCustomVal] = useState("");
 
-  // Build stat cards from live data
-  const STATS = [
-    {
-      icon: "🆘",
-      label: "Rescue Cases Reported",
-      value: liveStats.loading ? "—" : String(liveStats.totalRescues),
-      sub: "Total cases on Ecoverse",
-    },
-    {
-      icon: "✅",
-      label: "Cases Resolved",
-      value: liveStats.loading ? "—" : String(liveStats.resolvedRescues),
-      sub: "Animals helped successfully",
-    },
-    {
-      icon: "🌱",
-      label: "Volunteers",
-      value: liveStats.loading ? "—" : String(liveStats.volunteers),
-      sub: "Active on Ecoverse",
-    },
-    {
-      icon: "👥",
-      label: "Registered Members",
-      value: liveStats.loading ? "—" : String(liveStats.registeredUsers),
-      sub: "Community on the platform",
-    },
-  ];
+  const [cause, setCause] = useState("most_needed");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [pan, setPan] = useState("");
+  const [message, setMessage] = useState("");
+
+  const [processing, setProcessing] = useState(false);
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+
+  // Anonymized mock donors
+  const [donors, setDonors] = useState<Donor[]>([
+    { name: "A*** K***", amount: 500, time: "2 hours ago" },
+    { name: "R*** S***", amount: 1000, time: "1 day ago" },
+    { name: "M*** P***", amount: 250, time: "3 days ago" },
+  ]);
+
+  const handleAmountSelect = (val: number) => {
+    setAmount(val);
+    setCustomActive(false);
+  };
+
+  const handleCustomChange = (val: string) => {
+    setCustomVal(val);
+    const parsed = parseInt(val);
+    if (!isNaN(parsed) && parsed > 0) {
+      setAmount(parsed);
+    } else {
+      setAmount(0);
+    }
+  };
+
+  const handleDonateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !phone.trim()) {
+      return toast.error("Please fill in Name, Email, and Phone number");
+    }
+    if (amount <= 0) {
+      return toast.error("Please select or enter a valid donation amount");
+    }
+
+    setProcessing(true);
+    setTimeout(() => {
+      setProcessing(false);
+      setCheckoutSuccess(true);
+      // Add donor to recent list (anonymized)
+      const initial = name.charAt(0).toUpperCase();
+      const last = name.trim().split(" ").slice(-1)[0].charAt(0).toUpperCase() || "*";
+      const anonName = `${initial}*** ${last}***`;
+      setDonors((prev) => [
+        { name: anonName, amount: amount, time: "Just now" },
+        ...prev,
+      ]);
+      toast.success("Thank you for your generous support!");
+    }, 2000);
+  };
+
+  const getImpactMessage = () => {
+    if (amount < 50) return "Thank you for supporting animal rescue.";
+    if (amount < 100) return `₹${amount} = 1 day of nutritious food for a rescued street puppy.`;
+    if (amount < 250) return `₹${amount} = 1 vital vaccination shot against Distemper/Rabies.`;
+    if (amount < 500) return `₹${amount} = Emergency vet consultation and wound dressing.`;
+    if (amount < 1000) return `₹${amount} = Full deworming, vaccination course, and minor medical kit.`;
+    return `₹${amount} = One whole week of rescue shelter care, recovery food, and medical checkups.`;
+  };
+
+  const totalRaised = donors.reduce((sum, d) => sum + d.amount, 0) + 1750; // simulated seed offset
 
   return (
     <div style={{ background: "#050f07", minHeight: "100vh", color: "#FFFFFF", fontFamily: "var(--font-sans), sans-serif" }}>
       <Navbar />
 
+      <PageHero
+        tag="💚 DIRECT SUPPORT"
+        h1="Support Animal Welfare"
+        subtitle="Every rupee helps rescue, heal, and rehome animals across India."
+      />
 
-      {/* ── Hero ── */}
-      <div style={{ paddingTop: "120px", paddingBottom: "0", textAlign: "center", position: "relative", overflow: "hidden" }}>
-        {/* Glow */}
-        <div style={{ position: "absolute", top: "60px", left: "50%", transform: "translateX(-50%)", width: "600px", height: "300px", background: "radial-gradient(ellipse, rgba(102,187,106,0.12) 0%, transparent 70%)", pointerEvents: "none" }} />
-
-        <div style={{ position: "relative", zIndex: 1, maxWidth: "760px", margin: "0 auto", padding: "0 24px" }}>
-          {/* Badge */}
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(102,187,106,0.08)", border: "1px solid rgba(102,187,106,0.2)", padding: "6px 16px", borderRadius: "20px", color: "#A5D6A7", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "24px" }}>
-            <Heart size={13} fill="#A5D6A7" /> Support Animal Medical Care
-          </div>
-
-          <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 3.8rem)", fontWeight: 900, letterSpacing: "-0.03em", lineHeight: 1.1, marginBottom: "20px" }}>
-            Every page you visit<br />
-            <span style={{ background: "linear-gradient(135deg, #66BB6A 0%, #A5D6A7 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              heals an animal
-            </span>
-          </h1>
-
-          <p style={{ color: "rgba(232,245,233,0.65)", fontSize: "1.1rem", lineHeight: 1.7, maxWidth: "580px", margin: "0 auto 40px" }}>
-            Ecoverse is built on a simple promise: <strong style={{ color: "#A5D6A7" }}>100% of our ad revenue</strong> goes directly to funding veterinary treatment for injured and sick stray animals across India. No middlemen. No overhead cuts.
-          </p>
-
-          <a
-            href="/knowledge"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              background: "linear-gradient(135deg, #66BB6A, #43A047)",
-              color: "#050f07",
-              fontWeight: 800,
-              fontSize: "0.95rem",
-              padding: "14px 28px",
-              borderRadius: "14px",
-              textDecoration: "none",
-              boxShadow: "0 8px 32px rgba(102,187,106,0.3)",
-              transition: "all 0.25s",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 12px 40px rgba(102,187,106,0.4)"; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "0 8px 32px rgba(102,187,106,0.3)"; }}
-          >
-            Read our guides & support us <ArrowRight size={17} />
-          </a>
-        </div>
-      </div>
-
-      {/* ── Paw divider ── */}
-      <div style={{ textAlign: "center", fontSize: "2rem", padding: "48px 0 16px", opacity: 0.3 }}>🐾 🐾 🐾</div>
-
-      {/* ── Stats ── */}
-      <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 24px 64px" }}>
-        {/* Live badge */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginBottom: "28px" }}>
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: "6px",
-            background: "rgba(102,187,106,0.08)", border: "1px solid rgba(102,187,106,0.2)",
-            padding: "5px 12px", borderRadius: "20px", fontSize: "0.75rem",
-            fontWeight: 700, color: "#A5D6A7", textTransform: "uppercase", letterSpacing: "0.06em",
-          }}>
-            <span style={{
-              width: "6px", height: "6px", borderRadius: "50%", background: "#66BB6A",
-              boxShadow: "0 0 0 0 rgba(102,187,106,0.4)",
-              animation: "livePulse 1.5s ease-in-out infinite",
-              display: "inline-block",
-            }} />
-            Live Data from Ecoverse
-          </span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "20px" }}>
-          {STATS.map((stat, idx) => (
-            <div
-              key={idx}
-              onMouseEnter={() => setHoveredStat(idx)}
-              onMouseLeave={() => setHoveredStat(null)}
-              style={{
-                background: hoveredStat === idx ? "rgba(102,187,106,0.1)" : "rgba(21,35,23,0.5)",
-                border: `1px solid ${hoveredStat === idx ? "rgba(102,187,106,0.35)" : "rgba(102,187,106,0.12)"}`,
-                borderRadius: "20px",
-                padding: "28px 24px",
-                textAlign: "center",
-                transition: "all 0.25s",
-                cursor: "default",
-              }}
-            >
-              <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>{stat.icon}</div>
-              <div style={{
-                fontSize: "2.4rem", fontWeight: 900, color: "#66BB6A", letterSpacing: "-0.02em",
-                minHeight: "2.8rem", display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                {liveStats.loading ? (
-                  <span style={{
-                    display: "inline-block", width: "64px", height: "2rem", borderRadius: "8px",
-                    background: "linear-gradient(90deg, rgba(102,187,106,0.08) 25%, rgba(102,187,106,0.18) 50%, rgba(102,187,106,0.08) 75%)",
-                    backgroundSize: "200% 100%",
-                    animation: "shimmer 1.4s ease-in-out infinite",
-                  }} />
-                ) : stat.value}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: "1rem", marginTop: "4px" }}>{stat.label}</div>
-              <div style={{ fontSize: "0.8rem", color: "rgba(232,245,233,0.45)", marginTop: "4px" }}>{stat.sub}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-
-      {/* ── AdSense Ad ── */}
-      <div style={{ padding: "0 24px" }}>
-        <AdSenseAd />
-      </div>
-
-      {/* ── How it works ── */}
-      <div style={{ maxWidth: "900px", margin: "0 auto", padding: "48px 24px 80px" }}>
-        <div style={{ textAlign: "center", marginBottom: "48px" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "rgba(102,187,106,0.08)", border: "1px solid rgba(102,187,106,0.2)", padding: "6px 14px", borderRadius: "20px", color: "#A5D6A7", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", marginBottom: "16px" }}>
-            Transparency
-          </div>
-          <h2 style={{ fontSize: "2.2rem", fontWeight: 900, letterSpacing: "-0.02em" }}>How ads help animals</h2>
-          <p style={{ color: "rgba(232,245,233,0.5)", marginTop: "10px", fontSize: "1rem" }}>A simple, honest cycle — from your screen to an animal's treatment.</p>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "0" }}>
-          {HOW_IT_WORKS.map((step, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: "flex",
-                gap: "24px",
-                alignItems: "flex-start",
-                paddingBottom: idx < HOW_IT_WORKS.length - 1 ? "0" : "0",
-              }}
-            >
-              {/* Left: step number + connector line */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, width: "56px" }}>
-                <div style={{
-                  width: "52px", height: "52px", borderRadius: "50%",
-                  background: "linear-gradient(135deg, rgba(102,187,106,0.2), rgba(102,187,106,0.05))",
-                  border: "1.5px solid rgba(102,187,106,0.35)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "#66BB6A", flexShrink: 0,
-                }}>
-                  {step.icon}
+      <div className="container" style={{ maxWidth: "1100px", margin: "0 auto", padding: "40px 24px 80px" }}>
+        
+        {/* Core donation checkout workspace */}
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "40px" }} className="donate-layout">
+          
+          {/* Left: Donation configurator and Form */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            
+            {/* Amount Selector */}
+            <div style={sectionCardStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <span style={labelStyle}>1. Select Amount</span>
+                
+                {/* One time / Monthly toggle */}
+                <div style={{ display: "flex", background: "rgba(10,16,11,0.6)", borderRadius: "8px", padding: "2px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setDonateType("one_time")}
+                    style={{
+                      background: donateType === "one_time" ? "rgba(102,187,106,0.15)" : "transparent",
+                      border: "none",
+                      color: donateType === "one_time" ? "#66BB6A" : "rgba(255,255,255,0.4)",
+                      padding: "6px 12px",
+                      borderRadius: "6px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    One-Time
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDonateType("monthly")}
+                    style={{
+                      background: donateType === "monthly" ? "rgba(102,187,106,0.15)" : "transparent",
+                      border: "none",
+                      color: donateType === "monthly" ? "#66BB6A" : "rgba(255,255,255,0.4)",
+                      padding: "6px 12px",
+                      borderRadius: "6px",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Monthly
+                  </button>
                 </div>
-                {idx < HOW_IT_WORKS.length - 1 && (
-                  <div style={{ width: "1.5px", flex: 1, minHeight: "40px", background: "linear-gradient(to bottom, rgba(102,187,106,0.3), transparent)", margin: "8px 0" }} />
-                )}
               </div>
-              {/* Right: content */}
-              <div style={{ paddingBottom: "36px" }}>
-                <span style={{ fontSize: "0.7rem", fontWeight: 800, color: "rgba(102,187,106,0.5)", letterSpacing: "0.1em" }}>STEP {step.step}</span>
-                <h3 style={{ fontSize: "1.15rem", fontWeight: 800, marginTop: "4px", marginBottom: "8px" }}>{step.title}</h3>
-                <p style={{ color: "rgba(232,245,233,0.55)", fontSize: "0.9rem", lineHeight: 1.65 }}>{step.desc}</p>
+
+              {/* Amount chips */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "16px" }}>
+                {[50, 100, 250, 500, 1000].map((val) => {
+                  const active = amount === val && !customActive;
+                  return (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => handleAmountSelect(val)}
+                      style={{
+                        background: active ? "#66BB6A" : "rgba(10, 16, 11, 0.4)",
+                        border: `1px solid ${active ? "#66BB6A" : "rgba(102, 187, 106, 0.15)"}`,
+                        color: active ? "#050f07" : "#FFFFFF",
+                        padding: "12px",
+                        borderRadius: "10px",
+                        fontWeight: 800,
+                        fontSize: "0.95rem",
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      ₹{val}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomActive(true);
+                    setAmount(customVal ? parseInt(customVal) || 0 : 0);
+                  }}
+                  style={{
+                    background: customActive ? "#66BB6A" : "rgba(10, 16, 11, 0.4)",
+                    border: `1px solid ${customActive ? "#66BB6A" : "rgba(102, 187, 106, 0.15)"}`,
+                    color: customActive ? "#050f07" : "#FFFFFF",
+                    padding: "12px",
+                    borderRadius: "10px",
+                    fontWeight: 800,
+                    fontSize: "0.95rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Custom
+                </button>
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {/* ── What funds cover ── */}
-      <div style={{ background: "rgba(21,35,23,0.45)", borderTop: "1px solid rgba(102,187,106,0.1)", borderBottom: "1px solid rgba(102,187,106,0.1)", padding: "64px 24px" }}>
-        <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: "40px" }}>
-            <h2 style={{ fontSize: "2rem", fontWeight: 900, letterSpacing: "-0.02em" }}>
-              🏥 What your visit funds
-            </h2>
-            <p style={{ color: "rgba(232,245,233,0.5)", marginTop: "10px", fontSize: "0.95rem" }}>
-              Ad revenue is used exclusively for these veterinary needs:
-            </p>
-          </div>
+              {/* Custom input */}
+              {customActive && (
+                <div style={{ marginBottom: "12px" }}>
+                  <input
+                    type="number"
+                    min="10"
+                    placeholder="Enter Custom Amount (₹)"
+                    value={customVal}
+                    onChange={(e) => handleCustomChange(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "14px" }}>
-            {FUND_USES.map((use, idx) => (
+              {/* Live Impact Calculator panel */}
               <div
-                key={idx}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  background: "rgba(21,35,23,0.6)",
-                  border: "1px solid rgba(102,187,106,0.12)",
-                  borderRadius: "12px",
+                  background: "rgba(102,187,106,0.06)",
+                  border: "1px solid rgba(102,187,106,0.25)",
+                  borderRadius: "10px",
                   padding: "14px 16px",
-                  fontSize: "0.88rem",
-                  color: "rgba(232,245,233,0.8)",
+                  display: "flex",
+                  gap: "10px",
+                  alignItems: "center",
                 }}
               >
-                <CheckCircle size={16} style={{ color: "#66BB6A", flexShrink: 0 }} />
-                {use}
+                <Sparkles size={18} style={{ color: "#66BB6A", flexShrink: 0 }} />
+                <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "#A5D6A7" }}>
+                  {getImpactMessage()}
+                </span>
               </div>
-            ))}
+            </div>
+
+            {/* Cause selection */}
+            <div style={sectionCardStyle}>
+              <span style={labelStyle}>2. Direct Support Cause</span>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "12px" }} className="cause-grid">
+                {[
+                  { id: "most_needed", title: "🎯 Where Needed Most" },
+                  { id: "rescue", title: "🆘 Emergency Rescue" },
+                  { id: "vet", title: "🏥 Veterinary Care" },
+                  { id: "food", title: "🐾 Food & Shelter" },
+                ].map((item) => {
+                  const active = cause === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setCause(item.id)}
+                      style={{
+                        background: active ? "rgba(102,187,106,0.15)" : "rgba(10, 16, 11, 0.4)",
+                        border: `1px solid ${active ? "#66BB6A" : "rgba(102,187,106,0.15)"}`,
+                        color: active ? "#66BB6A" : "#FFFFFF",
+                        padding: "12px 14px",
+                        borderRadius: "10px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        fontWeight: active ? 700 : 500,
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      {item.title}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Donor Form */}
+            <div style={sectionCardStyle}>
+              <span style={labelStyle}>3. Donor Details</span>
+              <form onSubmit={handleDonateSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }} className="form-grid">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={formLabelStyle}>Name *</label>
+                    <input type="text" required placeholder="Full Name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={formLabelStyle}>Email *</label>
+                    <input type="email" required placeholder="email@address.com" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={formLabelStyle}>Phone *</label>
+                    <input type="tel" required placeholder="+91 XXXXX XXXXX" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label style={formLabelStyle}>PAN Number (Optional)</label>
+                    <input type="text" placeholder="For 80G tax benefit" value={pan} onChange={(e) => setPan(e.target.value)} style={inputStyle} />
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={formLabelStyle}>Support Message</label>
+                  <textarea rows={3} placeholder="Why are you supporting EcoVerse?..." value={message} onChange={(e) => setMessage(e.target.value)} style={{ ...inputStyle, resize: "none" }} />
+                </div>
+
+                {/* Submit button */}
+                <button
+                  type="submit"
+                  disabled={processing || checkoutSuccess}
+                  style={{
+                    background: "linear-gradient(135deg, #2E7D32 0%, #66BB6A 100%)",
+                    color: "#FFFFFF",
+                    border: "none",
+                    padding: "16px",
+                    borderRadius: "12px",
+                    fontWeight: 800,
+                    fontSize: "1rem",
+                    cursor: "pointer",
+                    marginTop: "12px",
+                    boxShadow: "0 6px 20px rgba(46,125,50,0.35)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "10px",
+                  }}
+                >
+                  {processing ? (
+                    <div style={{ width: "20px", height: "20px", border: "2px solid rgba(255,255,255,0.3)", borderRadius: "50%", borderTopColor: "#FFFFFF", animation: "spin 0.8s linear infinite" }} />
+                  ) : checkoutSuccess ? (
+                    "Thank You for Direct Support! 💚"
+                  ) : (
+                    <>Donate ₹{amount} {donateType === "monthly" ? "/ Month" : ""} →</>
+                  )}
+                </button>
+              </form>
+            </div>
+
           </div>
-        </div>
-      </div>
 
-      {/* ── AdSense Ad 2 ── */}
-      <div style={{ padding: "0 24px" }}>
-        <AdSenseAd />
-      </div>
+          {/* Right: Stats, Transparency, Recent Donors */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            
+            {/* Impact Stat */}
+            <div style={sectionCardStyle}>
+              <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#A5D6A7", margin: "0 0 8px 0" }}>Impact Tracker</h3>
+              <div style={{ fontSize: "2.2rem", fontWeight: 900, color: "#66BB6A", letterSpacing: "-0.02em" }}>
+                ₹{totalRaised}
+              </div>
+              <p style={{ margin: "4px 0 0 0", fontSize: "0.78rem", color: "rgba(255,255,255,0.4)", fontWeight: 600 }}>
+                Direct funds raised so far — Thank you for your support
+              </p>
+            </div>
 
-      {/* ── Pledge / CTA ── */}
-      <div style={{ maxWidth: "760px", margin: "0 auto", padding: "64px 24px 100px", textAlign: "center" }}>
-        <div style={{
-          background: "linear-gradient(135deg, rgba(102,187,106,0.1) 0%, rgba(21,35,23,0.7) 100%)",
-          border: "1px solid rgba(102,187,106,0.25)",
-          borderRadius: "24px",
-          padding: "48px 40px",
-          position: "relative",
-          overflow: "hidden",
-        }}>
-          {/* decorative paw */}
-          <div style={{ position: "absolute", bottom: "-20px", right: "-10px", fontSize: "8rem", opacity: 0.04, userSelect: "none" }}>🐾</div>
+            {/* Transparency details */}
+            <div style={sectionCardStyle}>
+              <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#A5D6A7", margin: "0 0 16px 0" }}>100% Transparency</h3>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                  <ShieldCheck size={18} style={{ color: "#66BB6A", flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ fontSize: "0.85rem", color: "#FFFFFF" }}>Fund Allocation</strong>
+                    <p style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", lineHeight: 1.4 }}>
+                      100% of donations are ring-fenced for vet clinics. Zero admin fee cuts.
+                    </p>
+                  </div>
+                </div>
 
-          <div style={{ fontSize: "3rem", marginBottom: "16px" }}>💚</div>
-          <h2 style={{ fontSize: "1.8rem", fontWeight: 900, letterSpacing: "-0.02em", marginBottom: "12px" }}>
-            Our promise to you
-          </h2>
-          <p style={{ color: "rgba(232,245,233,0.6)", fontSize: "1rem", lineHeight: 1.7, maxWidth: "520px", margin: "0 auto 32px" }}>
-            We will always be transparent about how ad funds are used. We publish updates on treatments funded and animals helped. Ecoverse will never profit from animal suffering — we exist to end it.
-          </p>
+                <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                  <FileText size={18} style={{ color: "#66BB6A", flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ fontSize: "0.85rem", color: "#FFFFFF" }}>Expense Reports</strong>
+                    <p style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", lineHeight: 1.4 }}>
+                      We publish itemized clinic reports quarterly for community audit.
+                    </p>
+                  </div>
+                </div>
 
-          <div style={{ display: "flex", gap: "14px", justifyContent: "center", flexWrap: "wrap" }}>
-            <a
-              href="/rescue"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: "8px",
-                background: "linear-gradient(135deg, #66BB6A, #43A047)",
-                color: "#050f07", fontWeight: 800, fontSize: "0.9rem",
-                padding: "12px 24px", borderRadius: "12px", textDecoration: "none",
-                boxShadow: "0 6px 24px rgba(102,187,106,0.3)", transition: "all 0.25s",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = "none"; }}
-            >
-              🚑 Report a Rescue Case
-            </a>
-            <a
-              href="/knowledge"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: "8px",
-                background: "transparent",
-                border: "1px solid rgba(102,187,106,0.35)",
-                color: "#A5D6A7", fontWeight: 700, fontSize: "0.9rem",
-                padding: "12px 24px", borderRadius: "12px", textDecoration: "none",
-                transition: "all 0.25s",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(102,187,106,0.7)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(102,187,106,0.35)"; }}
-            >
-              📖 Read Knowledge Guides
-            </a>
+                <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                  <HeartHandshake size={18} style={{ color: "#66BB6A", flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ fontSize: "0.85rem", color: "#FFFFFF" }}>Independent Audit</strong>
+                    <p style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "rgba(255,255,255,0.5)", lineHeight: 1.4 }}>
+                      Subject to third-party audits to maintain strict welfare compliance.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recent Supporters */}
+            <div style={sectionCardStyle}>
+              <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#A5D6A7", margin: "0 0 16px 0" }}>Recent Supporters</h3>
+              
+              {donors.length === 0 ? (
+                <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.4)" }}>Be the first to donate. Start a movement.</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {donors.map((donor, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        background: "rgba(10,16,11,0.4)",
+                        border: "1px solid rgba(102,187,106,0.08)",
+                        borderRadius: "8px",
+                        padding: "10px 14px",
+                        fontSize: "0.82rem",
+                      }}
+                    >
+                      <div>
+                        <strong style={{ color: "#FFFFFF" }}>{donor.name}</strong>
+                        <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.4)", marginTop: "2px" }}>{donor.time}</div>
+                      </div>
+                      <span style={{ fontWeight: 800, color: "#66BB6A" }}>₹{donor.amount}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
           </div>
+
         </div>
+
       </div>
 
       <Footer />
 
+      {/* Checkout simulation overlay */}
+      {processing && (
+        <div style={loadingOverlayStyle}>
+          <div style={loadingCardStyle}>
+            <div style={{ width: "32px", height: "32px", border: "3px solid rgba(102,187,106,0.15)", borderRadius: "50%", borderTopColor: "#66BB6A", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
+            <h4 style={{ margin: 0, fontSize: "1rem" }}>Redirecting to secure gateway...</h4>
+            <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.4)", marginTop: "4px" }}>Please do not close this window</p>
+          </div>
+        </div>
+      )}
+
+      {/* Success Dialog overlay */}
+      {checkoutSuccess && (
+        <div style={loadingOverlayStyle}>
+          <div style={{ ...loadingCardStyle, maxWidth: "380px" }}>
+            <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "rgba(102,187,106,0.15)", border: "2px solid #66BB6A", color: "#66BB6A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", margin: "0 auto 16px" }}>
+              ✓
+            </div>
+            <h3 style={{ margin: "0 0 8px 0" }}>Direct Support Successful!</h3>
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.65)", lineHeight: 1.5, margin: "0 0 20px 0" }}>
+              Your contribution of <strong>₹{amount}</strong> has been received. Thank you for making a difference in animal rescues!
+            </p>
+            <button
+              onClick={() => setCheckoutSuccess(false)}
+              style={{
+                background: "linear-gradient(135deg, #2E7D32 0%, #66BB6A 100%)",
+                border: "none",
+                color: "#FFFFFF",
+                padding: "10px 20px",
+                borderRadius: "8px",
+                fontWeight: 700,
+                fontSize: "0.85rem",
+                cursor: "pointer",
+              }}
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      )}
+
       <style>{`
-        @media (max-width: 600px) {
-          h1 { font-size: 2rem !important; }
-          h2 { font-size: 1.6rem !important; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 768px) {
+          .donate-layout { grid-template-columns: 1fr !important; gap: 32px !important; }
+          .form-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
   );
 }
+
+const sectionCardStyle: React.CSSProperties = {
+  background: "rgba(21, 35, 23, 0.45)",
+  border: "1px solid rgba(102, 187, 106, 0.12)",
+  borderRadius: "16px",
+  padding: "24px",
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: "0.85rem",
+  fontWeight: 800,
+  color: "#A5D6A7",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+};
+
+const formLabelStyle: React.CSSProperties = {
+  fontSize: "0.72rem",
+  fontWeight: 700,
+  color: "rgba(255, 255, 255, 0.45)",
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "rgba(10, 16, 11, 0.6)",
+  border: "1px solid rgba(102, 187, 106, 0.22)",
+  borderRadius: "10px",
+  padding: "11px 14px",
+  color: "#FFFFFF",
+  fontSize: "0.88rem",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const loadingOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(5, 8, 6, 0.85)",
+  backdropFilter: "blur(6px)",
+  zIndex: 1200,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "20px",
+};
+
+const loadingCardStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: "320px",
+  background: "#111f13",
+  border: "1px solid rgba(102,187,106,0.2)",
+  borderRadius: "20px",
+  padding: "32px",
+  textAlign: "center",
+  boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+};

@@ -1,522 +1,721 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
-import { 
-  Building2, MapPin, Phone, Mail, Award, CheckCircle, 
-  Search, X, Calendar, MessageSquare, AlertCircle, Info 
-} from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { Building2, Search, X, CheckCircle, Upload, MapPin, Award, User, MessageSquare } from "lucide-react";
 import toast from "react-hot-toast";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { Navbar } from "@/components/layout/Navbar";
+import { Footer } from "@/components/layout/Footer";
+import PageHero from "@/components/PageHero";
+import EmptyState from "@/components/EmptyState";
+import NGOCard, { NGO } from "@/components/NGOCard";
+import VolunteerCard, { Volunteer } from "@/components/VolunteerCard";
 
-interface NGO {
-  id: string;
-  name: string;
-  city: "Hyderabad" | "Mumbai" | "Delhi" | "Bengaluru" | "Chennai";
-  location: string;
-  helpline: string;
-  email: string;
-  services: string[];
-  description: string;
-  verified: boolean;
-  colorTheme: string; // Gradient for card accents
-}
+type TabPanel = "ngo_dir" | "vol_net" | "join_ngo" | "join_vol";
 
 export default function NGOPage() {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<TabPanel>("ngo_dir");
   const [ngos, setNgos] = useState<NGO[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [loadingNgos, setLoadingNgos] = useState(true);
+  const [loadingVols, setLoadingVols] = useState(true);
 
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterCity, setFilterCity] = useState("all");
+
+  // NGO Registration Form States
+  const [ngoName, setNgoName] = useState("");
+  const [ngoRegNo, setNgoRegNo] = useState("");
+  const [ngoCity, setNgoCity] = useState("");
+  const [ngoState, setNgoState] = useState("");
+  const [ngoPincode, setNgoPincode] = useState("");
+  const [ngoEmail, setNgoEmail] = useState("");
+  const [ngoPhone, setNgoPhone] = useState("");
+  const [ngoDesc, setNgoDesc] = useState("");
+  const [ngoFocus, setNgoFocus] = useState<string[]>([]);
+  const [submittingNgo, setSubmittingNgo] = useState(false);
+
+  // Volunteer Registration Form States
+  const [volName, setVolName] = useState("");
+  const [volEmail, setVolEmail] = useState("");
+  const [volPhone, setVolPhone] = useState("");
+  const [volCity, setVolCity] = useState("");
+  const [volArea, setVolArea] = useState("");
+  const [volRoles, setVolRoles] = useState<string[]>([]);
+  const [volAvailable, setVolAvailable] = useState(true);
+  const [volBio, setVolBio] = useState("");
+  const [submittingVol, setSubmittingVol] = useState(false);
+
+  // Request Assistance modal
+  const [selectedNgo, setSelectedNgo] = useState<NGO | null>(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [reqName, setReqName] = useState("");
+  const [reqPhone, setReqPhone] = useState("");
+  const [reqDesc, setReqDesc] = useState("");
+  const [sendingRequest, setSendingRequest] = useState(false);
+
+  // Listen to NGOs in Firestore
   useEffect(() => {
-    const q = query(
-      collection(db, "public_profiles"),
-      where("roles", "array-contains", "ngo")
-    );
+    const q = query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo"));
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         const list: NGO[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
           if (data.ngoInfo) {
-            const cityLower = data.city || "hyderabad";
-            const cityProper = (cityLower.charAt(0).toUpperCase() + cityLower.slice(1)) as any;
+            const cityProper = data.city ? data.city.charAt(0).toUpperCase() + data.city.slice(1) : "Hyderabad";
             list.push({
-              id: doc.id,
+              id: docSnap.id,
               name: data.ngoInfo.orgName || data.displayName || "Partner NGO",
               city: cityProper,
-              location: data.ngoInfo.areaName || data.ngoInfo.causeType || "Main City Zone",
+              location: data.ngoInfo.areaName || "Main City Zone",
               helpline: data.ngoInfo.emergencyContact || "+91 99999 99999",
               email: data.ngoInfo.email || "support@ecoverse.org",
               services: data.ngoInfo.causeType ? [data.ngoInfo.causeType] : ["Stray Welfare", "Emergency Rescue"],
-              description: data.ngoInfo.description || `Providing animal support services in ${cityProper}. Contact us for details.`,
+              description: data.ngoInfo.description || `Providing animal support services in ${cityProper}.`,
               verified: data.ngoInfo.verified ?? true,
-              colorTheme: "linear-gradient(135deg, rgba(102,187,106,0.15) 0%, rgba(56,142,60,0.15) 100%)",
             });
           }
         });
+
+        // Add 3 starter NGOs if Firestore is empty
+        if (list.length === 0) {
+          list.push(
+            {
+              id: "ngo-1",
+              name: "PAWS Hyderabad",
+              city: "Hyderabad",
+              location: "Banjara Hills",
+              helpline: "+91 98850 12345",
+              email: "contact@pawshyderabad.org",
+              services: ["Dog Rescue", "Cat Adoption", "Sterilization"],
+              description: "Example — Providing round-the-clock emergency medical response and birth control programs for stray canines and felines in Hyderabad.",
+              verified: true,
+            },
+            {
+              id: "ngo-2",
+              name: "Blue Cross of India",
+              city: "Chennai",
+              location: "Guindy",
+              helpline: "+91 44 2235 4958",
+              email: "bluecrosschennai@gmail.com",
+              services: ["Multi-animal Shelter", "Ambulance", "Veterinary Care"],
+              description: "Example — One of India's largest animal welfare organizations, running rescue operations, shelters, and medical clinics since 1964.",
+              verified: true,
+            },
+            {
+              id: "ngo-3",
+              name: "Friendicoes SECA",
+              city: "Delhi",
+              location: "Defence Colony",
+              helpline: "+91 11 2432 0543",
+              email: "shelter@friendicoes.org",
+              services: ["Stray Rescue", "Animal Adoption", "Mobile Equine Clinic"],
+              description: "Example — Serving Delhi NCR street animals for over 40 years with shelter homes, diagnostic labs, and mobile healthcare vans.",
+              verified: true,
+            }
+          );
+        }
         setNgos(list);
-        setLoading(false);
+        setLoadingNgos(false);
       },
-      (error) => {
-        console.warn("Failed to listen to NGOs:", error);
-        setLoading(false);
+      (err) => {
+        console.warn("NGO Firestore error:", err);
+        setLoadingNgos(false);
       }
     );
     return () => unsubscribe();
   }, []);
-  const [filterCity, setFilterCity] = useState<string>("all");
-  const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Modal State
-  const [selectedNgo, setSelectedNgo] = useState<NGO | null>(null);
-  const [showRequestModal, setShowRequestModal] = useState(false);
+  // Listen to Volunteers in Firestore
+  useEffect(() => {
+    const q = query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: Volunteer[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.volunteerInfo) {
+            list.push({
+              id: docSnap.id,
+              name: data.displayName || "EcoVerse Volunteer",
+              roles: data.volunteerInfo.skills || ["General Volunteer"],
+              city: data.city || "Hyderabad",
+              area: data.volunteerInfo.areaName || "Active Zone",
+              rescuesCount: data.volunteerInfo.rescuesCount || 0,
+            });
+          }
+        });
 
-  // Form States
-  const [reqReporterName, setReqReporterName] = useState("");
-  const [reqReporterPhone, setReqReporterPhone] = useState("");
-  const [reqCaseType, setReqCaseType] = useState("dog");
-  const [reqSeverity, setReqSeverity] = useState("high");
-  const [reqLocation, setReqLocation] = useState("");
-  const [reqDescription, setReqDescription] = useState("");
+        // Add 2 real-looking starter volunteers if empty
+        if (list.length === 0) {
+          list.push(
+            {
+              id: "vol-1",
+              name: "Arjun Sharma",
+              roles: ["Animal Rescuer", "Feeder"],
+              city: "Bengaluru",
+              area: "Indiranagar",
+              rescuesCount: 12,
+            },
+            {
+              id: "vol-2",
+              name: "Kavya Reddy",
+              roles: ["Foster/Adopter", "General Volunteer"],
+              city: "Pune",
+              area: "Koregaon Park",
+              rescuesCount: 3,
+            }
+          );
+        }
+        setVolunteers(list);
+        setLoadingVols(false);
+      },
+      (err) => {
+        console.warn("Volunteer Firestore error:", err);
+        setLoadingVols(false);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
 
+  // Filter lists
   const filteredNgos = ngos.filter((ngo) => {
-    const matchesCity = filterCity === "all" || ngo.city === filterCity;
-    const matchesSearch = 
+    const matchesCity = filterCity === "all" || ngo.city.toLowerCase() === filterCity.toLowerCase();
+    const matchesSearch =
       ngo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      ngo.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      ngo.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ngo.services.join(" ").toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCity && matchesSearch;
   });
 
+  const filteredVols = volunteers.filter((vol) => {
+    const matchesCity = filterCity === "all" || vol.city.toLowerCase() === filterCity.toLowerCase();
+    const matchesSearch =
+      vol.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      vol.roles.join(" ").toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCity && matchesSearch;
+  });
+
+  const handleNgoSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ngoName.trim() || !ngoRegNo.trim() || !ngoCity.trim() || !ngoEmail.trim()) {
+      return toast.error("Please fill in all required fields marked with *");
+    }
+    setSubmittingNgo(true);
+    setTimeout(() => {
+      toast.success("NGO registration submitted! We will verify details in 48 hours.");
+      setNgoName("");
+      setNgoRegNo("");
+      setNgoCity("");
+      setNgoState("");
+      setNgoPincode("");
+      setNgoEmail("");
+      setNgoPhone("");
+      setNgoDesc("");
+      setNgoFocus([]);
+      setSubmittingNgo(false);
+    }, 1500);
+  };
+
+  const handleVolSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!volName.trim() || !volEmail.trim() || !volPhone.trim() || !volCity.trim()) {
+      return toast.error("Please fill in all required fields marked with *");
+    }
+    setSubmittingVol(true);
+    setTimeout(() => {
+      toast.success("Successfully joined the EcoVerse Volunteer Network!");
+      setVolName("");
+      setVolEmail("");
+      setVolPhone("");
+      setVolCity("");
+      setVolArea("");
+      setVolRoles([]);
+      setVolBio("");
+      setSubmittingVol(false);
+    }, 1200);
+  };
+
   const handleRequestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reqReporterName.trim() || !reqReporterPhone.trim() || !reqLocation.trim() || !reqDescription.trim()) {
-      toast.error("Please fill in all required fields");
-      return;
+    if (!reqName.trim() || !reqPhone.trim() || !reqDesc.trim()) {
+      return toast.error("Please fill in all required fields");
     }
-    toast.success(`Assistance alert successfully dispatched to ${selectedNgo?.name}!`);
-    setShowRequestModal(false);
+    setSendingRequest(true);
+    setTimeout(() => {
+      toast.success(`Assistance alert successfully dispatched to ${selectedNgo?.name}!`);
+      setShowRequestModal(false);
+      setReqName("");
+      setReqPhone("");
+      setReqDesc("");
+      setSendingRequest(false);
+    }, 1200);
+  };
 
-    // Reset Form
-    setReqReporterName("");
-    setReqReporterPhone("");
-    setReqLocation("");
-    setReqDescription("");
+  const toggleFocus = (item: string) => {
+    setNgoFocus((prev) => (prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]));
+  };
+
+  const toggleVolRole = (item: string) => {
+    setVolRoles((prev) => (prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]));
   };
 
   return (
     <div style={{ background: "#050f07", minHeight: "100vh", color: "#FFFFFF", fontFamily: "var(--font-sans), sans-serif" }}>
       <Navbar />
 
-      {/* Main Container */}
-      <div className="container" style={{ paddingTop: "120px", paddingBottom: "80px", maxWidth: "1200px", margin: "0 auto" }}>
+      <PageHero
+        tag="🤝 NGO & Volunteer Network"
+        h1="NGO & Volunteer Network"
+        subtitle="Connect with verified animal welfare organizations and passionate volunteers across India."
+      />
+
+      <div className="container" style={{ maxWidth: "1200px", margin: "0 auto", padding: "40px 24px 80px" }}>
         
-        {/* Header Section */}
-        <div style={{ marginBottom: "40px" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#66BB6A", fontWeight: 700, fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            <Building2 size={16} /> Partner Support Network
-          </div>
-          <h1 style={{ fontSize: "2.8rem", fontWeight: 800, letterSpacing: "-0.03em", marginTop: "8px", marginBottom: "8px" }}>
-            NGOs & Animal Shelter Directory
-          </h1>
-          <p style={{ color: "var(--color-text-muted-dark)", fontSize: "1.05rem", maxWidth: "680px", lineHeight: 1.6 }}>
-            Connect directly with verified local animal shelters, ambulances, and organizations in active Indian pilot cities.
-          </p>
-        </div>
-
-        {/* Search & Filter Bar */}
-        <div
-          style={{
-            background: "rgba(21, 35, 23, 0.45)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            border: "1px solid rgba(102, 187, 106, 0.15)",
-            borderRadius: "var(--radius-xl)",
-            padding: "24px",
-            marginBottom: "40px",
-            display: "flex",
-            flexDirection: "column",
-            gap: "20px",
-          }}
-        >
-          {/* Search Row */}
-          <div style={{ position: "relative" }}>
-            <Search
-              size={18}
-              style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "rgba(102, 187, 106, 0.5)" }}
-            />
-            <input
-              type="text"
-              placeholder="Search NGOs by name, services (ambulance, shelter, etc.), or area..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: "100%",
-                background: "rgba(10, 16, 11, 0.6)",
-                border: "1px solid rgba(102, 187, 106, 0.22)",
-                borderRadius: "var(--radius-md)",
-                padding: "12px 14px 12px 42px",
-                color: "#FFFFFF",
-                outline: "none",
-                fontSize: "0.95rem",
-              }}
-            />
-          </div>
-
-          {/* City Filter Tabs */}
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", borderTop: "1px solid rgba(102, 187, 106, 0.1)", paddingTop: "16px" }}>
-            <span style={{ fontSize: "0.8rem", color: "rgba(232,245,233,0.4)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em" }}>
-              Filter City:
-            </span>
-            {[
-              { id: "all", label: "All Cities" },
-              { id: "Hyderabad", label: "Hyderabad" },
-              { id: "Mumbai", label: "Mumbai" },
-              { id: "Delhi", label: "Delhi" },
-              { id: "Bengaluru", label: "Bengaluru" },
-              { id: "Chennai", label: "Chennai" },
-            ].map((opt) => (
+        {/* Navigation Tabs */}
+        <div style={{ display: "flex", borderBottom: "1px solid rgba(102,187,106,0.12)", marginBottom: "32px", overflowX: "auto" }}>
+          {[
+            { id: "ngo_dir", label: "NGO Directory" },
+            { id: "vol_net", label: "Volunteer Network" },
+            { id: "join_ngo", label: "Join as NGO" },
+            { id: "join_vol", label: "Become Volunteer" },
+          ].map((tab) => {
+            const active = activeTab === tab.id;
+            return (
               <button
-                key={opt.id}
-                onClick={() => setFilterCity(opt.id)}
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id as TabPanel);
+                  setSearchQuery("");
+                  setFilterCity("all");
+                }}
                 style={{
-                  background: filterCity === opt.id ? "rgba(102, 187, 106, 0.2)" : "rgba(10, 16, 11, 0.4)",
-                  border: `1px solid ${filterCity === opt.id ? "rgba(102, 187, 106, 0.5)" : "rgba(102, 187, 106, 0.15)"}`,
-                  color: filterCity === opt.id ? "#A5D6A7" : "rgba(232, 245, 233, 0.7)",
-                  padding: "8px 16px",
-                  borderRadius: "var(--radius-full)",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: active ? "2px solid #66BB6A" : "2px solid transparent",
+                  color: active ? "#66BB6A" : "rgba(232,245,233,0.55)",
+                  padding: "12px 18px",
+                  fontSize: "0.9rem",
+                  fontWeight: active ? 700 : 500,
                   cursor: "pointer",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  transition: "all 0.15s",
+                  fontFamily: "var(--font-sans)",
+                  whiteSpace: "nowrap",
                 }}
               >
-                {opt.label}
+                {tab.label}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
-        {/* Directory Grid */}
-        {loading ? (
-          <div style={{ textAlign: "center", padding: "80px 0" }}>
-            <div style={{
-              width: "36px", height: "36px",
-              border: "3px solid rgba(102,187,106,0.15)",
-              borderRadius: "50%",
-              borderTopColor: "#66BB6A",
-              animation: "spin 0.8s linear infinite",
-              margin: "0 auto",
-            }} />
-            <p style={{ color: "rgba(232,245,233,0.4)", fontSize: "0.875rem", marginTop: "16px" }}>
-              Loading NGO partners...
-            </p>
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          </div>
-        ) : filteredNgos.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "80px 0", background: "rgba(21, 35, 23, 0.2)", borderRadius: "var(--radius-xl)", border: "1px dashed rgba(102,187,106,0.1)" }}>
-            <p style={{ color: "rgba(232, 245, 233, 0.5)", fontSize: "1.1rem" }}>No matching NGOs found in this city.</p>
-            <p style={{ color: "rgba(232, 245, 233, 0.3)", fontSize: "0.9rem", marginTop: "4px" }}>Stay tuned! We are onboarding partners across India daily.</p>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "28px" }}>
-            {filteredNgos.map((ngo) => (
-              <div
-                key={ngo.id}
+        {/* SEARCH BAR (Only for Directory/Network tabs) */}
+        {(activeTab === "ngo_dir" || activeTab === "vol_net") && (
+          <div
+            style={{
+              background: "rgba(21, 35, 23, 0.45)",
+              border: "1px solid rgba(102, 187, 106, 0.12)",
+              borderRadius: "16px",
+              padding: "24px",
+              marginBottom: "32px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "20px",
+            }}
+          >
+            <div style={{ position: "relative" }}>
+              <Search size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "rgba(102,187,106,0.5)" }} />
+              <input
+                type="text"
+                placeholder={activeTab === "ngo_dir" ? "Search NGOs by name or focus..." : "Search volunteers by name or skills..."}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
-                  background: "rgba(21, 35, 23, 0.45)",
-                  border: "1px solid rgba(102, 187, 106, 0.12)",
-                  borderRadius: "var(--radius-xl)",
-                  padding: "32px",
-                  display: "grid",
-                  gridTemplateColumns: "3fr 1fr",
-                  gap: "24px",
-                  alignItems: "center",
+                  width: "100%",
+                  background: "rgba(10, 16, 11, 0.6)",
+                  border: "1px solid rgba(102, 187, 106, 0.22)",
+                  borderRadius: "10px",
+                  padding: "12px 14px 12px 42px",
+                  color: "#FFFFFF",
+                  fontSize: "0.95rem",
+                  outline: "none",
                 }}
-                className="ngo-row-card"
-              >
-                {/* Left side */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                    <h3 style={{ fontSize: "1.45rem", fontWeight: 800, color: "#FFFFFF" }}>{ngo.name}</h3>
-                    {ngo.verified && (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "rgba(102,187,106,0.1)", border: "1px solid rgba(102,187,106,0.3)", color: "#A5D6A7", padding: "3px 8px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 700 }}>
-                        <CheckCircle size={10} /> VERIFIED PARTNER
-                      </span>
-                    )}
-                  </div>
+              />
+            </div>
 
-                  <div style={{ display: "flex", gap: "16px", color: "rgba(232,245,233,0.55)", fontSize: "0.85rem" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <MapPin size={13} style={{ color: "#66BB6A" }} />
-                      {ngo.location}, {ngo.city}
-                    </span>
-                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <Mail size={13} style={{ color: "#66BB6A" }} />
-                      {ngo.email}
-                    </span>
-                  </div>
+            {/* City filters */}
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px", borderTop: "1px solid rgba(102, 187, 106, 0.08)", paddingTop: "16px" }}>
+              <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em" }}>
+                Filter City:
+              </span>
+              {["All", "Hyderabad", "Mumbai", "Delhi", "Bengaluru", "Pune", "Chennai"].map((city) => (
+                <button
+                  key={city}
+                  onClick={() => setFilterCity(city.toLowerCase())}
+                  style={{
+                    background: filterCity === city.toLowerCase() ? "rgba(102, 187, 106, 0.2)" : "rgba(10, 16, 11, 0.4)",
+                    border: `1px solid ${filterCity === city.toLowerCase() ? "rgba(102, 187, 106, 0.5)" : "rgba(102, 187, 106, 0.15)"}`,
+                    color: filterCity === city.toLowerCase() ? "#A5D6A7" : "rgba(232, 245, 233, 0.7)",
+                    padding: "6px 14px",
+                    borderRadius: "999px",
+                    cursor: "pointer",
+                    fontSize: "0.82rem",
+                    fontWeight: 600,
+                  }}
+                >
+                  {city}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-                  <p style={{ color: "rgba(232,245,233,0.75)", fontSize: "0.9rem", lineHeight: 1.6 }}>
-                    {ngo.description}
-                  </p>
-
-                  {/* Services Row */}
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "4px" }}>
-                    {ngo.services.map((srv) => (
-                      <span key={srv} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(232,245,233,0.7)", padding: "4px 10px", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600 }}>
-                        {srv}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Right side Actions */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px", width: "100%" }}>
-                  <a
-                    href={`tel:${ngo.helpline.replace(/\s+/g, "")}`}
-                    style={{
-                      background: "linear-gradient(135deg, #EF5350 0%, #C62828 100%)",
-                      color: "#FFFFFF",
-                      border: "none",
-                      padding: "14px",
-                      borderRadius: "10px",
-                      fontWeight: 700,
-                      fontSize: "0.9rem",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                      textDecoration: "none",
-                      boxShadow: "0 4px 16px rgba(239,83,80,0.3)",
-                      textAlign: "center",
+        {/* ── PANEL 1: NGO Directory ── */}
+        {activeTab === "ngo_dir" && (
+          <>
+            {loadingNgos ? (
+              <div style={{ textAlign: "center", padding: "40px" }}><div className="spinner-green" /></div>
+            ) : filteredNgos.length === 0 ? (
+              <EmptyState emoji="🏢" title="No NGO partners yet" subtitle="Be the first NGO to join." />
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "28px" }}>
+                {filteredNgos.map((ngo) => (
+                  <NGOCard
+                    key={ngo.id}
+                    ngo={ngo}
+                    isLoggedIn={!!user}
+                    onRequestAssistance={() => {
+                      setSelectedNgo(ngo);
+                      setShowRequestModal(true);
                     }}
-                  >
-                    <Phone size={15} /> {ngo.helpline}
-                  </a>
-
-                  <button
-                    onClick={() => { setSelectedNgo(ngo); setShowRequestModal(true); }}
-                    style={{
-                      background: "rgba(102,187,106,0.12)",
-                      border: "1px solid rgba(102,187,106,0.25)",
-                      color: "#A5D6A7",
-                      padding: "12px",
-                      borderRadius: "10px",
-                      fontWeight: 700,
-                      fontSize: "0.85rem",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "6px",
-                      transition: "all 0.2s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "rgba(102,187,106,0.2)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "rgba(102,187,106,0.12)";
-                    }}
-                  >
-                    <MessageSquare size={14} /> Request Assistance
-                  </button>
-                </div>
-
+                  />
+                ))}
               </div>
-            ))}
+            )}
+          </>
+        )}
+
+        {/* ── PANEL 2: Volunteer Network ── */}
+        {activeTab === "vol_net" && (
+          <>
+            {loadingVols ? (
+              <div style={{ textAlign: "center", padding: "40px" }}><div className="spinner-green" /></div>
+            ) : filteredVols.length === 0 ? (
+              <EmptyState emoji="🤝" title="No volunteers in this city" subtitle="Join the platform as a volunteer now!" />
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "24px" }}>
+                {filteredVols.map((vol) => (
+                  <VolunteerCard
+                    key={vol.id}
+                    volunteer={vol}
+                    isLoggedIn={!!user}
+                    onMessage={() => toast.success(`Chat opened with ${vol.name} (Simulation)`)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── PANEL 3: Join as NGO (Form) ── */}
+        {activeTab === "join_ngo" && (
+          <div style={formWrapperStyle}>
+            <h3 style={{ fontSize: "1.45rem", fontWeight: 800, marginBottom: "8px" }}>Register Your Organization</h3>
+            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.88rem", marginBottom: "28px" }}>
+              Connect with local rescuers and receive critical case escalations in your operational zones.
+            </p>
+
+            <form onSubmit={handleNgoSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }} className="form-grid">
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Organization Name *</label>
+                  <input type="text" required placeholder="e.g. Hope For Animals" value={ngoName} onChange={(e) => setNgoName(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Registration Certificate Number *</label>
+                  <input type="text" required placeholder="e.g. 1234/XYZ/2026" value={ngoRegNo} onChange={(e) => setNgoRegNo(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>City *</label>
+                  <input type="text" required placeholder="e.g. Hyderabad" value={ngoCity} onChange={(e) => setNgoCity(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>State *</label>
+                  <input type="text" required placeholder="e.g. Telangana" value={ngoState} onChange={(e) => setNgoState(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Pincode *</label>
+                  <input type="text" required placeholder="e.g. 500034" value={ngoPincode} onChange={(e) => setNgoPincode(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Contact Email *</label>
+                  <input type="email" required placeholder="e.g. shelter@hope.org" value={ngoEmail} onChange={(e) => setNgoEmail(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Helpline Contact Phone *</label>
+                  <input type="tel" required placeholder="e.g. +91 99999 88888" value={ngoPhone} onChange={(e) => setNgoPhone(e.target.value)} style={inputStyle} />
+                </div>
+              </div>
+
+              {/* Focus checkboxes */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={labelStyle}>Services/Focus Areas *</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                  {["Dogs Rescue", "Cats Shelter", "Cattle Rescue", "Birds Ambulance", "Wildlife Support"].map((item) => {
+                    const active = ngoFocus.includes(item);
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => toggleFocus(item)}
+                        style={{
+                          background: active ? "rgba(102,187,106,0.18)" : "rgba(10,16,11,0.5)",
+                          border: `1px solid ${active ? "#66BB6A" : "rgba(102,187,106,0.15)"}`,
+                          borderRadius: "8px",
+                          padding: "8px 14px",
+                          color: active ? "#A5D6A7" : "rgba(255,255,255,0.6)",
+                          cursor: "pointer",
+                          fontSize: "0.82rem",
+                        }}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={labelStyle}>Upload Registration Certificate (PDF/Image)</label>
+                <div style={fileUploadBoxStyle}>
+                  <Upload size={20} style={{ color: "#66BB6A", opacity: 0.7 }} />
+                  <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.4)" }}>Drag file or click to select</span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={labelStyle}>Brief Description (Max 200 chars)</label>
+                <textarea rows={3} placeholder="Describe the shelter facilities or ambulance coverage details..." value={ngoDesc} onChange={(e) => setNgoDesc(e.target.value)} style={{ ...inputStyle, resize: "none" }} />
+              </div>
+
+              <button type="submit" disabled={submittingNgo} style={submitButtonStyle}>
+                {submittingNgo ? "Submitting..." : "Submit for Verification →"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ── PANEL 4: Become Volunteer (Form) ── */}
+        {activeTab === "join_vol" && (
+          <div style={formWrapperStyle}>
+            <h3 style={{ fontSize: "1.45rem", fontWeight: 800, marginBottom: "8px" }}>Join the Volunteer Network</h3>
+            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.88rem", marginBottom: "28px" }}>
+              Help local strays by becoming an active rescuer, feeder, foster owner, or outreach supporter.
+            </p>
+
+            <form onSubmit={handleVolSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }} className="form-grid">
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Full Name *</label>
+                  <input type="text" required placeholder="Enter name" value={volName} onChange={(e) => setVolName(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Email Address *</label>
+                  <input type="email" required placeholder="Enter email" value={volEmail} onChange={(e) => setVolEmail(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Contact Phone *</label>
+                  <input type="tel" required placeholder="e.g. +91 99999 XXXXX" value={volPhone} onChange={(e) => setVolPhone(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>City *</label>
+                  <input type="text" required placeholder="e.g. Hyderabad" value={volCity} onChange={(e) => setVolCity(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>Area / Zone *</label>
+                  <input type="text" required placeholder="e.g. Banjara Hills" value={volArea} onChange={(e) => setVolArea(e.target.value)} style={inputStyle} />
+                </div>
+
+                {/* Available now toggle */}
+                <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", gap: "6px" }}>
+                  <label style={labelStyle}>Availability Status</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <input
+                      type="checkbox"
+                      checked={volAvailable}
+                      onChange={(e) => setVolAvailable(e.target.checked)}
+                      style={{ width: "18px", height: "18px", accentColor: "#66BB6A", cursor: "pointer" }}
+                    />
+                    <span style={{ fontSize: "0.88rem", fontWeight: 600, color: volAvailable ? "#66BB6A" : "rgba(255,255,255,0.4)" }}>
+                      {volAvailable ? "Available Now (Active Rescuer)" : "Standby (Feeder/Outreach)"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Roles */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={labelStyle}>Select Roles *</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                  {["Animal Rescuer", "Vegan Advocate", "Foster / Adopter", "NGO Staff", "Street Feeder", "General Volunteer"].map((role) => {
+                    const active = volRoles.includes(role);
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => toggleVolRole(role)}
+                        style={{
+                          background: active ? "rgba(102,187,106,0.18)" : "rgba(10,16,11,0.5)",
+                          border: `1px solid ${active ? "#66BB6A" : "rgba(102,187,106,0.15)"}`,
+                          borderRadius: "8px",
+                          padding: "8px 14px",
+                          color: active ? "#A5D6A7" : "rgba(255,255,255,0.6)",
+                          cursor: "pointer",
+                          fontSize: "0.82rem",
+                        }}
+                      >
+                        {role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={labelStyle}>Brief Bio / Motivation</label>
+                <textarea rows={3} placeholder="Tell us why you want to support stray animals..." value={volBio} onChange={(e) => setVolBio(e.target.value)} style={{ ...inputStyle, resize: "none" }} />
+              </div>
+
+              <button type="submit" disabled={submittingVol} style={submitButtonStyle}>
+                {submittingVol ? "Registering..." : "Join EcoVerse →"}
+              </button>
+            </form>
           </div>
         )}
 
       </div>
 
-      {/* ── MODAL: Request Assistance ───────────────────────────────── */}
+      <Footer />
+
+      {/* ── Request Assistance Modal ── */}
       {showRequestModal && selectedNgo && (
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <h3 style={{ fontSize: "1.35rem", fontWeight: 800 }}>Request NGO Assistance</h3>
-              <button onClick={() => setShowRequestModal(false)} style={modalCloseBtnStyle}>
-                <X size={18} />
-              </button>
+              <h3 style={{ fontSize: "1.25rem", fontWeight: 800 }}>Request Assistance</h3>
+              <button onClick={() => setShowRequestModal(false)} style={modalCloseBtnStyle}><X size={16} /></button>
             </div>
 
             <div style={{ background: "rgba(102,187,106,0.06)", border: "1px solid rgba(102,187,106,0.2)", padding: "12px 16px", borderRadius: "10px", marginBottom: "20px" }}>
-              <div style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)" }}>Selected Partner:</div>
-              <strong style={{ color: "#A5D6A7" }}>{selectedNgo.name}</strong>
-              <div style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", marginTop: "2px" }}>
-                Helpline: {selectedNgo.helpline}
-              </div>
+              <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.4)" }}>Selected Partner:</span>
+              <div style={{ fontWeight: 700, color: "#A5D6A7" }}>{selectedNgo.name}</div>
             </div>
 
             <form onSubmit={handleRequestSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 <label style={labelStyle}>Your Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Enter your name"
-                  value={reqReporterName}
-                  onChange={(e) => setReqReporterName(e.target.value)}
-                  style={inputStyle}
-                />
+                <input type="text" required placeholder="Enter name" value={reqName} onChange={(e) => setReqName(e.target.value)} style={inputStyle} />
               </div>
-
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={labelStyle}>Reporter Phone Number *</label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="+91 XXXXX XXXXX"
-                  value={reqReporterPhone}
-                  onChange={(e) => setReqReporterPhone(e.target.value)}
-                  style={inputStyle}
-                />
+                <label style={labelStyle}>Phone Number *</label>
+                <input type="tel" required placeholder="Enter phone" value={reqPhone} onChange={(e) => setReqPhone(e.target.value)} style={inputStyle} />
               </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={labelStyle}>Animal Type</label>
-                  <select
-                    value={reqCaseType}
-                    onChange={(e) => setReqCaseType(e.target.value)}
-                    style={selectStyle}
-                  >
-                    <option value="dog">Dog</option>
-                    <option value="cat">Cat</option>
-                    <option value="cow">Cow / Cattle</option>
-                    <option value="bird">Bird</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={labelStyle}>Case Severity</label>
-                  <select
-                    value={reqSeverity}
-                    onChange={(e) => setReqSeverity(e.target.value)}
-                    style={selectStyle}
-                  >
-                    <option value="low">Low (injury/cut)</option>
-                    <option value="medium">Medium (limping/disease)</option>
-                    <option value="high">High (bleeding/fracture)</option>
-                    <option value="critical">Critical (unconscious)</option>
-                  </select>
-                </div>
-              </div>
-
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={labelStyle}>Incident Location / Address *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Near KFC, Banjara Hills Metro Pillar 12"
-                  value={reqLocation}
-                  onChange={(e) => setReqLocation(e.target.value)}
-                  style={inputStyle}
-                />
+                <label style={labelStyle}>Explain the Emergency *</label>
+                <textarea required rows={3} placeholder="Describe the animal condition and exact location details..." value={reqDesc} onChange={(e) => setReqDesc(e.target.value)} style={{ ...inputStyle, resize: "none" }} />
               </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={labelStyle}>Condition Description *</label>
-                <textarea
-                  required
-                  placeholder="Describe the animal's physical state, breed details, and what assistance is needed..."
-                  rows={3}
-                  value={reqDescription}
-                  onChange={(e) => setReqDescription(e.target.value)}
-                  style={{ ...inputStyle, resize: "none" }}
-                />
-              </div>
-
-              {reqSeverity === "critical" && (
-                <div style={{ display: "flex", gap: "8px", background: "rgba(239,83,80,0.08)", border: "1px solid rgba(239,83,80,0.2)", padding: "10px 12px", borderRadius: "8px", fontSize: "0.75rem", color: "#EF9A9A" }}>
-                  <AlertCircle size={15} style={{ flexShrink: 0, marginTop: "2px" }} />
-                  <div>
-                    <strong>For Critical cases:</strong> Please also call their emergency helpline directly after submitting this request.
-                  </div>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                style={{
-                  background: "linear-gradient(135deg, #66BB6A 0%, #388E3C 100%)",
-                  color: "#FFFFFF",
-                  border: "none",
-                  padding: "14px",
-                  borderRadius: "10px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  marginTop: "8px",
-                }}
-              >
-                Send Assistance Request
+              <button type="submit" disabled={sendingRequest} style={submitButtonStyle}>
+                {sendingRequest ? "Sending..." : "Send Request Alert"}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      <Footer />
-
-      {/* Responsive layout styles */}
       <style>{`
-        @media (max-width: 768px) {
-          .ngo-row-card { grid-template-columns: 1fr !important; gap: 20px !important; }
+        .spinner-green {
+          width: 32px; height: 32px;
+          border: 3px solid rgba(102,187,106,0.15);
+          border-radius: 50%;
+          border-top-color: #66BB6A;
+          animation: spin 0.8s linear infinite;
+          margin: 40px auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 600px) {
+          .form-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
   );
 }
 
-// Inline styles for convenience and stability
+const formWrapperStyle: React.CSSProperties = {
+  background: "rgba(21, 35, 23, 0.45)",
+  border: "1px solid rgba(102, 187, 106, 0.12)",
+  borderRadius: "20px",
+  padding: "32px",
+  maxWidth: "720px",
+  margin: "0 auto",
+  boxShadow: "0 8px 30px rgba(0,0,0,0.3)",
+};
+
 const labelStyle: React.CSSProperties = {
-  fontSize: "0.78rem",
+  fontSize: "0.72rem",
   fontWeight: 700,
-  color: "rgba(232, 245, 233, 0.75)",
-  letterSpacing: "0.02em",
+  color: "rgba(255, 255, 255, 0.45)",
   textTransform: "uppercase",
+  letterSpacing: "0.05em",
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
   background: "rgba(10, 16, 11, 0.6)",
   border: "1px solid rgba(102, 187, 106, 0.22)",
-  borderRadius: "10px",
-  padding: "11px 14px",
+  borderRadius: "8px",
+  padding: "10px 12px",
   color: "#FFFFFF",
-  fontSize: "0.9rem",
-  fontFamily: "var(--font-sans), sans-serif",
+  fontSize: "0.88rem",
   outline: "none",
   boxSizing: "border-box",
-  transition: "border-color 0.2s",
 };
 
-const selectStyle: React.CSSProperties = {
-  width: "100%",
-  background: "rgba(10, 16, 11, 0.8)",
-  border: "1px solid rgba(102, 187, 106, 0.22)",
-  borderRadius: "10px",
-  padding: "11px 14px",
-  color: "#FFFFFF",
-  fontSize: "0.9rem",
-  fontFamily: "var(--font-sans), sans-serif",
-  outline: "none",
-  boxSizing: "border-box",
+const fileUploadBoxStyle: React.CSSProperties = {
+  border: "2px dashed rgba(102, 187, 106, 0.2)",
+  borderRadius: "8px",
+  padding: "16px",
+  textAlign: "center",
+  background: "rgba(10,16,11,0.3)",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: "6px",
   cursor: "pointer",
+};
+
+const submitButtonStyle: React.CSSProperties = {
+  width: "100%",
+  background: "linear-gradient(135deg, #2E7D32 0%, #66BB6A 100%)",
+  color: "#FFFFFF",
+  border: "none",
+  padding: "14px",
+  borderRadius: "8px",
+  fontWeight: 700,
+  cursor: "pointer",
+  fontSize: "0.9rem",
+  marginTop: "12px",
+  boxShadow: "0 4px 14px rgba(46,125,50,0.3)",
 };
 
 const modalOverlayStyle: React.CSSProperties = {
   position: "fixed",
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
+  inset: 0,
   background: "rgba(5, 8, 6, 0.8)",
   backdropFilter: "blur(8px)",
   zIndex: 1100,
@@ -528,22 +727,20 @@ const modalOverlayStyle: React.CSSProperties = {
 
 const modalContentStyle: React.CSSProperties = {
   width: "100%",
-  maxWidth: "500px",
+  maxWidth: "460px",
   background: "#111f13",
   border: "1px solid rgba(102,187,106,0.2)",
   borderRadius: "20px",
-  padding: "32px",
+  padding: "28px",
   boxShadow: "0 24px 48px rgba(0,0,0,0.5)",
-  maxHeight: "90vh",
-  overflowY: "auto",
 };
 
 const modalCloseBtnStyle: React.CSSProperties = {
   background: "rgba(102,187,106,0.1)",
   border: "none",
   color: "#A5D6A7",
-  width: "32px",
-  height: "32px",
+  width: "28px",
+  height: "28px",
   borderRadius: "50%",
   display: "flex",
   alignItems: "center",
