@@ -4,9 +4,9 @@ import { execSync } from 'child_process';
 const apiPath = './src/app/api';
 const backupPath = './api-backup';
 const middlewarePath = './src/middleware.ts';
-const middlewareBackupPath = './src/middleware-backup.ts';
+const middlewareBackupPath = './middleware-backup.ts';
 const proxyPath = './src/proxy.ts';
-const proxyBackupPath = './src/proxy-backup.ts';
+const proxyBackupPath = './proxy-backup.ts';
 
 let apiRenamed = false;
 let middlewareRenamed = false;
