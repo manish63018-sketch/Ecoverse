@@ -104,7 +104,7 @@ export default function PrivacyPolicyPage() {
             "Withdraw Consent: Opt out of non-essential notifications at any time",
           ]} />
           <LegalParagraph>
-            To exercise any right, email us at <a href="mailto:privacy@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>privacy@ecoverseindia.web.app</a>. We will respond within 30 days.
+            To exercise any right, email us at <a href="mailto:manish63018@gmail.com" style={{ color: "#66BB6A" }}>manish63018@gmail.com</a>. We will respond within 30 days.
           </LegalParagraph>
         </LegalSection>
 
@@ -116,7 +116,7 @@ export default function PrivacyPolicyPage() {
 
         <LegalSection title="7. Children&apos;s Policy">
           <LegalParagraph>
-            EcoVerse is intended for users aged 13 and above. We do not knowingly collect personal data from children under 13. If we discover such data has been collected, we will delete it immediately. Parents/guardians may contact us at <a href="mailto:privacy@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>privacy@ecoverseindia.web.app</a>.
+            EcoVerse is intended for users aged 13 and above. We do not knowingly collect personal data from children under 13. If we discover such data has been collected, we will delete it immediately. Parents/guardians may contact us at <a href="mailto:manish63018@gmail.com" style={{ color: "#66BB6A" }}>manish63018@gmail.com</a>.
           </LegalParagraph>
         </LegalSection>
 
@@ -129,7 +129,7 @@ export default function PrivacyPolicyPage() {
         <LegalSection title="9. Contact">
           <LegalParagraph>
             For any privacy concerns or data requests, contact us at:<br />
-            📧 <a href="mailto:privacy@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>privacy@ecoverseindia.web.app</a><br />
+            📧 <a href="mailto:manish63018@gmail.com" style={{ color: "#66BB6A" }}>manish63018@gmail.com</a><br />
             This policy is governed by the laws of India (IT Act 2000, PDPB 2023).
           </LegalParagraph>
         </LegalSection>

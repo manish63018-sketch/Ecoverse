@@ -63,33 +63,7 @@ export default function VolunteerDirectoryPage() {
         setVolunteers(list);
       } catch (err) {
         console.warn("Failed to load volunteers from Supabase:", err);
-        // Fallback mock volunteers
-        setVolunteers([
-          {
-            id: "mock-v1",
-            displayName: "Amit Sharma",
-            city: "Mumbai",
-            roles: ["volunteer", "rescuer"],
-            volunteerInfo: {
-              availableNow: true,
-              hoursPerWeek: 8,
-              radiusKm: 5,
-              skills: ["First Aid", "Dog Handling"]
-            }
-          },
-          {
-            id: "mock-v2",
-            displayName: "Priya Patel",
-            city: "Pune",
-            roles: ["volunteer", "transport"],
-            volunteerInfo: {
-              availableNow: false,
-              hoursPerWeek: 4,
-              radiusKm: 15,
-              skills: ["Transport", "Cat Handling"]
-            }
-          }
-        ]);
+        setVolunteers([]);
       } finally {
         setLoading(false);
       }

@@ -111,7 +111,7 @@ export default function TermsOfServicePage() {
         <LegalSection title="9. Contact">
           <LegalParagraph>
             Questions about these Terms? Reach us at:<br />
-            📧 <a href="mailto:support@ecoverseindia.web.app" style={{ color: "#66BB6A" }}>support@ecoverseindia.web.app</a><br />
+            📧 <a href="mailto:manish63018@gmail.com" style={{ color: "#66BB6A" }}>manish63018@gmail.com</a><br />
             📸 Instagram: <a href="https://instagram.com/mannish_2323" target="_blank" rel="noopener noreferrer" style={{ color: "#66BB6A" }}>@mannish_2323</a>
           </LegalParagraph>
         </LegalSection>

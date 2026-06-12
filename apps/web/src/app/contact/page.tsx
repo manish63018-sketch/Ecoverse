@@ -90,8 +90,8 @@ export default function ContactPage() {
                   <Mail size={16} style={{ color: "#66BB6A", marginTop: "3px" }} />
                   <div>
                     <div style={{ fontSize: "0.78rem", color: "rgba(232,245,233,0.4)", textTransform: "uppercase", fontWeight: 700 }}>Email Support</div>
-                    <a href="mailto:support@ecoverseindia.web.app" style={{ fontSize: "0.95rem", color: "#E8F5E9", textDecoration: "none", fontWeight: 600 }}>
-                      support@ecoverseindia.web.app
+                    <a href="mailto:manish63018@gmail.com" style={{ fontSize: "0.95rem", color: "#E8F5E9", textDecoration: "none", fontWeight: 600 }}>
+                      manish63018@gmail.com
                     </a>
                   </div>
                 </div>

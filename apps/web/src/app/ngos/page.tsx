@@ -81,82 +81,10 @@ export default function NGOPage() {
           verified: ngo.is_verified,
         }));
 
-        // Add 3 starter NGOs if database is empty
-        if (list.length === 0) {
-          list.push(
-            {
-              id: "ngo-1",
-              name: "PAWS Hyderabad",
-              city: "Hyderabad",
-              location: "Banjara Hills",
-              helpline: "+91 98850 12345",
-              email: "contact@pawshyderabad.org",
-              services: ["Dog Rescue", "Cat Adoption", "Sterilization"],
-              description: "Example — Providing round-the-clock emergency medical response and birth control programs for stray canines and felines in Hyderabad.",
-              verified: true,
-            },
-            {
-              id: "ngo-2",
-              name: "Blue Cross of India",
-              city: "Chennai",
-              location: "Guindy",
-              helpline: "+91 44 2235 4958",
-              email: "bluecrosschennai@gmail.com",
-              services: ["Multi-animal Shelter", "Ambulance", "Veterinary Care"],
-              description: "Example — One of India's largest animal welfare organizations, running rescue operations, shelters, and medical clinics since 1964.",
-              verified: true,
-            },
-            {
-              id: "ngo-3",
-              name: "Friendicoes SECA",
-              city: "Delhi",
-              location: "Defence Colony",
-              helpline: "+91 11 2432 0543",
-              email: "shelter@friendicoes.org",
-              services: ["Stray Rescue", "Animal Adoption", "Mobile Equine Clinic"],
-              description: "Example — Serving Delhi NCR street animals for over 40 years with shelter homes, diagnostic labs, and mobile healthcare vans.",
-              verified: true,
-            }
-          );
-        }
         setNgos(list);
       } catch (err) {
         console.warn("Failed to fetch NGOs from Supabase:", err);
-        setNgos([
-          {
-            id: "ngo-1",
-            name: "PAWS Hyderabad",
-            city: "Hyderabad",
-            location: "Banjara Hills",
-            helpline: "+91 98850 12345",
-            email: "contact@pawshyderabad.org",
-            services: ["Dog Rescue", "Cat Adoption", "Sterilization"],
-            description: "Example — Providing round-the-clock emergency medical response and birth control programs for stray canines and felines in Hyderabad.",
-            verified: true,
-          },
-          {
-            id: "ngo-2",
-            name: "Blue Cross of India",
-            city: "Chennai",
-            location: "Guindy",
-            helpline: "+91 44 2235 4958",
-            email: "bluecrosschennai@gmail.com",
-            services: ["Multi-animal Shelter", "Ambulance", "Veterinary Care"],
-            description: "Example — One of India's largest animal welfare organizations, running rescue operations, shelters, and medical clinics since 1964.",
-            verified: true,
-          },
-          {
-            id: "ngo-3",
-            name: "Friendicoes SECA",
-            city: "Delhi",
-            location: "Defence Colony",
-            helpline: "+91 11 2432 0543",
-            email: "shelter@friendicoes.org",
-            services: ["Stray Rescue", "Animal Adoption", "Mobile Equine Clinic"],
-            description: "Example — Serving Delhi NCR street animals for over 40 years with shelter homes, diagnostic labs, and mobile healthcare vans.",
-            verified: true,
-          }
-        ]);
+        setNgos([]);
       } finally {
         setLoadingNgos(false);
       }
@@ -186,47 +114,10 @@ export default function NGOPage() {
           rescuesCount: prof.rescue_count || 0,
         }));
 
-        if (list.length === 0) {
-          list.push(
-            {
-              id: "vol-1",
-              name: "Arjun Sharma",
-              roles: ["Animal Rescuer", "Feeder"],
-              city: "Bengaluru",
-              area: "Indiranagar",
-              rescuesCount: 12,
-            },
-            {
-              id: "vol-2",
-              name: "Kavya Reddy",
-              roles: ["Foster/Adopter", "General Volunteer"],
-              city: "Pune",
-              area: "Koregaon Park",
-              rescuesCount: 3,
-            }
-          );
-        }
         setVolunteers(list);
       } catch (err) {
         console.warn("Failed to fetch volunteers from Supabase:", err);
-        setVolunteers([
-          {
-            id: "vol-1",
-            name: "Arjun Sharma",
-            roles: ["Animal Rescuer", "Feeder"],
-            city: "Bengaluru",
-            area: "Indiranagar",
-            rescuesCount: 12,
-          },
-          {
-            id: "vol-2",
-            name: "Kavya Reddy",
-            roles: ["Foster/Adopter", "General Volunteer"],
-            city: "Pune",
-            area: "Koregaon Park",
-            rescuesCount: 3,
-          }
-        ]);
+        setVolunteers([]);
       } finally {
         setLoadingVols(false);
       }

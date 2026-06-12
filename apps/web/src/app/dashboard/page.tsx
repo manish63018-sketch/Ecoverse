@@ -94,28 +94,7 @@ export default function DashboardPage() {
       setRescues(mapped);
     } catch (err: any) {
       console.error("Failed to fetch rescue cases", err);
-      if (err.code === "42P01" || err.message?.includes('relation "rescue_cases" does not exist') || err.message?.includes("Failed to fetch")) {
-        console.warn("rescue_cases table does not exist or fetch failed. Using mock fallback data.");
-        setRescues([
-          {
-            id: "mock-r1",
-            reporter_user_id: "mock-u1",
-            reporter_name: "Rahul Rao",
-            state_id: "Telangana",
-            city_id: "Hyderabad",
-            area_id: "Banjara Hills",
-            area_name: "Banjara Hills",
-            display_zone: "Banjara Hills, Hyderabad, Telangana",
-            animal_type: "dog",
-            condition_summary: "Street dog with fractured leg near Road No. 12",
-            emergency_level: "high",
-            description: "Injured dog hit by a two-wheeler. Needs immediate transport to animal clinic.",
-            status: "open",
-            created_at: new Date(Date.now() - 1800000).toISOString(),
-          }
-        ]);
-        return;
-      }
+      setRescues([]);
       toast.error("Failed to load rescue feed");
     } finally {
       setLoadingCases(false);
