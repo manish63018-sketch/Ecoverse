@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { Users, Sparkles, Search, X } from 'lucide-react';
 
 interface JoinInfo {
@@ -25,155 +24,152 @@ export function LiveJoinNotification() {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'standby'>('all');
 
-  // 1. Fetch real counts & profiles from Firestore in real-time
+  // 1. Fetch real counts & profiles from Supabase in real-time
   useEffect(() => {
-    // A. Real-time count of registered members
-    const unsubscribeCount = onSnapshot(collection(db, 'public_profiles'), (snapshot) => {
-      setTotalCount(snapshot.size);
-    }, (err) => {
-      console.warn('Could not listen to live profile count:', err);
-    });
+    const fetchRecentAndCount = async () => {
+      try {
+        const [recentRes, countRes] = await Promise.all([
+          supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(25),
+          supabase.from('profiles').select('id', { count: 'exact', head: true })
+        ]);
 
-    let isInitialLoad = true;
+        if (recentRes.data) {
+          const formatted = recentRes.data.map((p: any) => {
+            const primaryRole = p.primary_role || (p.roles && p.roles[0]) || 'volunteer';
+            let roleText = 'Community Member';
+            let emoji = '🌿';
+            let isActive = false;
 
-    // B. Real-time recent user joins
-    const qRecent = query(collection(db, 'public_profiles'), limit(25));
-    const unsubscribeRecent = onSnapshot(qRecent, (snapshot) => {
-      const fetchedJoins: JoinInfo[] = [];
-
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.displayName && data.city && data.roles && data.roles.length > 0) {
-          const primaryRole = data.roles[0];
-          let roleText = 'Community Member';
-          let emoji = '🌿';
-          let isActive = false;
-
-          switch (primaryRole) {
-            case 'volunteer':
-              roleText = 'Volunteer Helper';
-              emoji = '🤝';
-              isActive = data.volunteerInfo?.availableNow ?? true;
-              break;
-            case 'vegan':
-              roleText = 'Vegan Advocate';
-              emoji = '🌱';
-              isActive = false;
-              break;
-            case 'adopter':
-              roleText = 'Foster / Adopter';
-              emoji = '🏡';
-              isActive = false;
-              break;
-            case 'ngo':
-              roleText = 'NGO Partner';
-              emoji = '🏥';
-              isActive = true;
-              break;
-            case 'feeder':
-              roleText = 'Street Feeder';
-              emoji = '🥣';
-              isActive = false;
-              break;
-            case 'rescuer':
-              roleText = 'Animal Rescuer';
-              emoji = '🐾';
-              isActive = data.rescuerInfo?.verified ?? true;
-              break;
-          }
-
-          const cityName = data.city.charAt(0).toUpperCase() + data.city.slice(1);
-
-          fetchedJoins.push({
-            displayName: data.displayName,
-            city: cityName,
-            roleText,
-            emoji,
-            isActive,
-          });
-        }
-      });
-
-      setJoins(fetchedJoins);
-
-      // Handle real-time additions (popups) after the initial load
-      if (!isInitialLoad) {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added') {
-            const data = change.doc.data();
-            if (data.displayName && data.city && data.roles && data.roles.length > 0) {
-              const primaryRole = data.roles[0];
-              let roleText = 'Community Member';
-              let emoji = '🌿';
-              let isActive = false;
-
-              switch (primaryRole) {
-                case 'volunteer':
-                  roleText = 'Volunteer Helper';
-                  emoji = '🤝';
-                  isActive = data.volunteerInfo?.availableNow ?? true;
-                  break;
-                case 'vegan':
-                  roleText = 'Vegan Advocate';
-                  emoji = '🌱';
-                  isActive = false;
-                  break;
-                case 'adopter':
-                  roleText = 'Foster / Adopter';
-                  emoji = '🏡';
-                  isActive = false;
-                  break;
-                case 'ngo':
-                  roleText = 'NGO Partner';
-                  emoji = '🏥';
-                  isActive = true;
-                  break;
-                case 'feeder':
-                  roleText = 'Street Feeder';
-                  emoji = '🥣';
-                  isActive = false;
-                  break;
-                case 'rescuer':
-                  roleText = 'Animal Rescuer';
-                  emoji = '🐾';
-                  isActive = data.rescuerInfo?.verified ?? true;
-                  break;
-              }
-
-              const cityName = data.city.charAt(0).toUpperCase() + data.city.slice(1);
-              const newJoin: JoinInfo = {
-                displayName: data.displayName,
-                city: cityName,
-                roleText,
-                emoji,
-                isActive,
-              };
-
-              // Prepend or add to joins and trigger popup
-              setJoins((prevList) => {
-                const alreadyExists = prevList.some(item => item.displayName === newJoin.displayName && item.city === newJoin.city);
-                const newList = alreadyExists ? prevList : [newJoin, ...prevList];
-                
-                const targetIndex = newList.findIndex(item => item.displayName === newJoin.displayName && item.city === newJoin.city);
-                setCurrentIndex(targetIndex !== -1 ? targetIndex : 0);
-                setVisible(true);
-                setAnimationClass('notification-slide-in');
-
-                return newList;
-              });
+            switch (primaryRole) {
+              case 'volunteer':
+                roleText = 'Volunteer Helper';
+                emoji = '🤝';
+                isActive = p.available_now ?? true;
+                break;
+              case 'vegan':
+                roleText = 'Vegan Advocate';
+                emoji = '🌱';
+                isActive = false;
+                break;
+              case 'adopter':
+                roleText = 'Foster / Adopter';
+                emoji = '🏡';
+                isActive = false;
+                break;
+              case 'ngo':
+              case 'ngo_staff':
+                roleText = 'NGO Partner';
+                emoji = '🏥';
+                isActive = true;
+                break;
+              case 'feeder':
+              case 'street_feeder':
+                roleText = 'Street Feeder';
+                emoji = '🥣';
+                isActive = false;
+                break;
+              case 'rescuer':
+                roleText = 'Animal Rescuer';
+                emoji = '🐾';
+                isActive = true;
+                break;
             }
-          }
-        });
-      }
 
-      isInitialLoad = false;
-    }, (err) => {
-      console.warn('Could not listen to public_profiles collection:', err);
-    });
+            const cityName = p.city_name ? p.city_name.charAt(0).toUpperCase() + p.city_name.slice(1) : 'Unknown';
+            return {
+              displayName: p.full_name || p.username || 'EcoVerse Member',
+              city: cityName,
+              roleText,
+              emoji,
+              isActive,
+            };
+          });
+
+          setJoins(formatted);
+        }
+
+        if (countRes.count !== null) {
+          setTotalCount(countRes.count);
+        }
+      } catch (err) {
+        console.warn('Could not fetch profiles from Supabase:', err);
+      }
+    };
+
+    fetchRecentAndCount();
+
+    // Listen to new profile inserts
+    const channel = supabase
+      .channel('live-joins')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'profiles' }, (payload) => {
+        const p = payload.new;
+        const primaryRole = p.primary_role || (p.roles && p.roles[0]) || 'volunteer';
+        let roleText = 'Community Member';
+        let emoji = '🌿';
+        let isActive = false;
+
+        switch (primaryRole) {
+          case 'volunteer':
+            roleText = 'Volunteer Helper';
+            emoji = '🤝';
+            isActive = p.available_now ?? true;
+            break;
+          case 'vegan':
+            roleText = 'Vegan Advocate';
+            emoji = '🌱';
+            isActive = false;
+            break;
+          case 'adopter':
+            roleText = 'Foster / Adopter';
+            emoji = '🏡';
+            isActive = false;
+            break;
+          case 'ngo':
+          case 'ngo_staff':
+            roleText = 'NGO Partner';
+            emoji = '🏥';
+            isActive = true;
+            break;
+          case 'feeder':
+          case 'street_feeder':
+            roleText = 'Street Feeder';
+            emoji = '🥣';
+            isActive = false;
+            break;
+          case 'rescuer':
+            roleText = 'Animal Rescuer';
+            emoji = '🐾';
+            isActive = true;
+            break;
+        }
+
+        const cityName = p.city_name ? p.city_name.charAt(0).toUpperCase() + p.city_name.slice(1) : 'Unknown';
+        const newJoin = {
+          displayName: p.full_name || p.username || 'EcoVerse Member',
+          city: cityName,
+          roleText,
+          emoji,
+          isActive,
+        };
+
+        setJoins((prevList) => {
+          const alreadyExists = prevList.some(item => item.displayName === newJoin.displayName && item.city === newJoin.city);
+          const newList = alreadyExists ? prevList : [newJoin, ...prevList];
+          
+          const targetIndex = newList.findIndex(item => item.displayName === newJoin.displayName && item.city === newJoin.city);
+          setCurrentIndex(targetIndex !== -1 ? targetIndex : 0);
+          setVisible(true);
+          setAnimationClass('notification-slide-in');
+
+          return newList;
+        });
+
+        setTotalCount((prev) => prev + 1);
+      })
+      .subscribe();
 
     return () => {
-      unsubscribeCount();
-      unsubscribeRecent();
+      supabase.removeChannel(channel);
     };
   }, []);
 

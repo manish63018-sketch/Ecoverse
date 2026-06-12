@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { Building2, Search, X, CheckCircle, Upload, MapPin, Award, User, MessageSquare } from "lucide-react";
 import toast from "react-hot-toast";
 import { supabase } from "@/lib/supabase";

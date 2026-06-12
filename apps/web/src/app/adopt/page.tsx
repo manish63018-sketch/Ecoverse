@@ -8,9 +8,8 @@ import {
   Check, Calendar, Info, X, Phone, User, Home, Sparkles 
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { useAuth } from "@/context/AuthContext";
-import { collection, query, onSnapshot, doc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import dynamic from "next/dynamic";
 import type { LocationSelection } from "@/types/location";
 import AnimalCard from "@/components/AnimalCard";
@@ -51,25 +50,61 @@ export default function AdoptPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, "adoption_pets"));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: AdoptionPet[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as AdoptionPet);
-        });
-        // Sort pets so that newly created ones appear first
-        list.sort((a, b) => b.id.localeCompare(a.id));
+    const fetchPets = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("adoptions")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        const list: AdoptionPet[] = (data || []).map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          type: d.animal_type || "other",
+          breed: d.breed || "Indie Mix",
+          age: d.age_years ? `${d.age_years} years` : d.age_months ? `${d.age_months} months` : "Unknown age",
+          ageGroup: d.age_years && d.age_years > 7 ? "senior" : d.age_years && d.age_years >= 1 ? "adult" : "puppy_kitten",
+          gender: d.gender === "Female" ? "Female" : "Male",
+          location: d.area_name || "Unknown",
+          city: d.city_name || "Unknown",
+          state: d.state_name || "India",
+          vaccinated: !!d.vaccinated,
+          neutered: !!d.neutered,
+          story: d.description || "No description provided",
+          imageColor: "linear-gradient(135deg, #FF9D6C 0%, #BB4E75 100%)",
+          emoji: d.animal_type === "dog" ? "🐶" : d.animal_type === "cat" ? "🐱" : "🐾",
+        }));
         setPets(list);
-        setLoading(false);
-      },
-      (error) => {
-        console.warn("Failed to listen to adoption pets:", error);
+      } catch (err) {
+        console.warn("Failed to fetch adoptions:", err);
+      } finally {
         setLoading(false);
       }
-    );
-    return () => unsubscribe();
+    };
+
+    fetchPets();
+
+    // Subscribe to realtime updates
+    const channel = supabase
+      .channel("live-adoptions")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "adoptions",
+        },
+        () => {
+          fetchPets();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
   const [filterType, setFilterType] = useState<string>("all");
   const [filterAge, setFilterAge] = useState<string>("all");
@@ -166,8 +201,39 @@ export default function AdoptPage() {
       emoji: emojis[newPetType] || "🐾",
     };
 
+    let ageYears = 1;
+    let ageMonths = 0;
+    if (newPetAge.toLowerCase().includes("month")) {
+      ageYears = 0;
+      ageMonths = parseInt(newPetAge) || 3;
+    } else {
+      ageYears = parseInt(newPetAge) || 1;
+    }
+
     try {
-      await setDoc(doc(db, "adoption_pets", petId), newPet);
+      const { error } = await supabase
+        .from("adoptions")
+        .insert({
+          id: petId,
+          poster_id: user.uid,
+          name: newPetName,
+          animal_type: newPetType,
+          breed: newPetBreed,
+          age_years: ageYears,
+          age_months: ageMonths,
+          gender: newPetGender,
+          state_name: selectedLocation.stateName,
+          city_name: selectedLocation.cityName,
+          area_name: selectedLocation.areaName,
+          vaccinated: newPetVaccinated,
+          neutered: newPetNeutered,
+          description: newPetStory || "No story provided",
+          color: "orange",
+          status: "available",
+        });
+
+      if (error) throw error;
+
       toast.success(`${newPetName} has been listed for adoption!`);
       setShowListModal(false);
 
@@ -181,7 +247,7 @@ export default function AdoptPage() {
       setNewPetVaccinated(false);
       setNewPetNeutered(false);
     } catch (err) {
-      console.error("Failed to list pet in Firestore:", err);
+      console.error("Failed to list pet in Supabase:", err);
       toast.error("Failed to save pet listing. Make sure you are logged in.");
     }
   };

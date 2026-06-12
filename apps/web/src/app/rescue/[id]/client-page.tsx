@@ -3,12 +3,10 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { ArrowLeft, Clock, MapPin, Shield, CheckCircle, AlertTriangle, User, MessageSquare, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
-import { doc, onSnapshot, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { getApiUrl } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import StatusBadge from "@/components/StatusBadge";
@@ -47,58 +45,88 @@ export default function RescueDetailPage() {
   useEffect(() => {
     if (!id) return;
     
-    const docRef = doc(db, "rescues", id);
-    const unsubscribe = onSnapshot(
-      docRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          setRescue(docSnap.data() as RescueDetail);
-        } else {
+    const fetchCase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("rescue_cases")
+          .select("*, reporter:reporter_id (full_name, phone)")
+          .eq("id", id)
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
           setRescue({
-            caseId: id,
-            reporterId: "simulated-user",
-            reporterContact: { name: "Ananya Sen", phone: "+91 98765 43210" },
-            animalType: "dog",
-            conditionDescription: "Injured street puppy found near Banjara Hills road, bleeding leg.",
-            severity: "high",
-            status: "reported",
-            location: { latitude: 17.4156, longitude: 78.4347, addressText: "Banjara Hills, Hyderabad, Telangana" },
-            createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+            caseId: data.id,
+            reporterId: data.reporter_id || "anonymous",
+            reporterContact: {
+              name: data.reporter_name || data.reporter?.full_name || "EcoVerse Supporter",
+              phone: data.reporter?.phone || "Not provided",
+            },
+            animalType: data.animal_type || "other",
+            conditionDescription: data.condition_summary || data.description || "No description provided",
+            severity: data.emergency_level || "medium",
+            status: data.status || "open",
+            location: {
+              latitude: Number(data.area_lat) || 17.4156,
+              longitude: Number(data.area_lng) || 78.4347,
+              addressText: data.display_zone || data.area_name || "Location not specified",
+            },
+            assignedVolunteerId: data.assigned_volunteer_id,
+            createdAt: data.created_at,
+            resolvedAt: data.resolved_at,
           });
         }
-        setLoading(false);
-      },
-      (err) => {
-        console.warn("Failed to stream rescue detail:", err);
+      } catch (err) {
+        console.warn("Failed to fetch rescue detail:", err);
+      } finally {
         setLoading(false);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    fetchCase();
+
+    // Subscribe to realtime updates
+    const channel = supabase
+      .channel(`rescue-case-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "rescue_cases",
+          filter: `id=eq.${id}`,
+        },
+        () => {
+          fetchCase();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   const handleMarkStatus = async (newStatus: "resolved" | "in_progress" | "escalated" | "assigned") => {
     if (!user) return toast.error("Please login to update status");
     setSubmitting(true);
 
-    const apiStatus = newStatus === "assigned" ? "in_progress" : newStatus;
+    const updateFields: any = { status: newStatus };
+    if (newStatus === "assigned") {
+      updateFields.assigned_volunteer_id = user.id;
+      updateFields.assigned_at = new Date().toISOString();
+    } else if (newStatus === "resolved") {
+      updateFields.resolved_at = new Date().toISOString();
+    }
 
     try {
-      const res = await fetch(getApiUrl(`/api/rescues/${id}`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: apiStatus }),
-      });
+      const { error } = await supabase
+        .from("rescue_cases")
+        .update(updateFields)
+        .eq("id", id);
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to update case");
-
-      const docRef = doc(db, "rescues", id);
-      const updates: any = { status: newStatus };
-      if (newStatus === "resolved") {
-        updates.resolvedAt = new Date().toISOString();
-      }
-      await updateDoc(docRef, updates);
+      if (error) throw error;
 
       toast.success(`Case marked as ${newStatus.replace("_", " ")}!`);
     } catch (err: any) {

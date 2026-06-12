@@ -1,7 +1,12 @@
+/**
+ * "Supabase is the only source of truth for authentication and app data."
+ */
+
 export interface Profile {
   id: string
   full_name: string | null
   username: string | null
+  email: string | null
   avatar_url: string | null
   bio: string | null
   phone: string | null
@@ -11,15 +16,22 @@ export interface Profile {
   pincode: string | null
   roles: string[]
   primary_role: string
+  is_admin: boolean
+  is_moderator: boolean
+  account_status: 'active' | 'suspended'
+  verification_status: 'unverified' | 'pending' | 'verified'
   available_now: boolean
-  verification_status: string
+  provider_source: 'supabase' | 'google'
+  notification_provider: 'firebase'
   rescue_count: number
   adopt_count: number
   volunteer_hours: number
-  fcm_token: string | null
   vegan_since: string | null
   vegan_pledge_taken: boolean
   vegan_streak_days: number
+  instagram_handle: string | null
+  rescue_radius_km: number
+  skills: string[]
   created_at: string
   updated_at: string
   last_seen_at: string
@@ -99,6 +111,9 @@ export interface CommunityPost {
   share_count: number
   is_pinned: boolean
   is_reported: boolean
+  is_flagged: boolean
+  ttl_days: number
+  expires_at: string | null
   created_at: string
 }
 

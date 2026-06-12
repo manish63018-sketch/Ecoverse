@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Users, Activity, ShieldAlert, BadgeCheck, Settings, 
   Megaphone, Shield, AlertTriangle, ArrowRight 
 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
+import { canViewAdmin } from "@/lib/permissions";
 import toast from "react-hot-toast";
 
 interface OverviewStats {
@@ -20,7 +22,8 @@ interface OverviewStats {
 }
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [stats, setStats] = useState<OverviewStats>({
     totalUsers: 0,
     activeToday: 0,
@@ -34,6 +37,14 @@ export default function AdminPage() {
   const [showBanner, setShowBanner] = useState(false);
   const [escalationTime, setEscalationTime] = useState(15);
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || !canViewAdmin(profile)) {
+      toast.error("Access denied. Admin permissions required.");
+      router.push("/dashboard");
+    }
+  }, [user, profile, authLoading, router]);
 
   const fetchStats = async () => {
     try {
@@ -100,6 +111,7 @@ export default function AdminPage() {
       const { error } = await supabase
         .from("admin_logs")
         .insert([{
+          admin_id: user?.id,
           action: "update_settings",
           detail: `Updated SOS Escalation threshold to ${escalationTime} mins`
         }]);
@@ -117,6 +129,7 @@ export default function AdminPage() {
       const { error } = await supabase
         .from("admin_logs")
         .insert([{
+          admin_id: user?.id,
           action: "post_announcement",
           detail: `Broadcaster: "${announcement}"`
         }]);

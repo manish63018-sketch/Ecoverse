@@ -1,3 +1,7 @@
+/**
+ * "Supabase is the only source of truth for authentication and app data."
+ */
+
 export interface RoleDetails {
   id: string;
   label: string;

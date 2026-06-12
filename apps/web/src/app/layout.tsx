@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/context/AuthContext";
 import { Toaster } from "react-hot-toast";
 import Script from "next/script";
 
@@ -52,6 +51,7 @@ export const metadata: Metadata = {
 
 import PixelSphere from "@/components/PixelSphere";
 import { LiveJoinNotification } from "@/components/sections/LiveJoinNotification";
+import { AuthProvider } from "@/context/AuthContext";
 
 export default function RootLayout({
   children,
@@ -61,6 +61,34 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var host = window.location.hostname;
+                if (
+                  host !== "ecoverseindia.web.app" &&
+                  host !== "localhost" &&
+                  host !== "127.0.0.1" &&
+                  !host.endsWith(".local")
+                ) {
+                  window.location.replace("https://ecoverseindia.web.app" + window.location.pathname + window.location.search + window.location.hash);
+                  return;
+                }
+
+                // Failsafe: detect Supabase password recovery flow and redirect to reset-password page
+                var path = window.location.pathname;
+                var search = window.location.search;
+                var hash = window.location.hash;
+                var isRecovery = hash.indexOf("type=recovery") !== -1 || hash.indexOf("access_token=") !== -1 || search.indexOf("code=") !== -1;
+                
+                if (isRecovery && path !== "/reset-password" && path !== "/reset-password/") {
+                  window.location.replace(window.location.protocol + "//" + window.location.host + "/reset-password" + search + hash);
+                }
+              })();
+            `
+          }}
+        />
         <meta name="google-adsense-account" content="ca-pub-8150181705727957" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

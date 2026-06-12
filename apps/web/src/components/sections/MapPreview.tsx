@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { collection, query, where, getCountFromServer } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 
 export function MapPreview() {
   const [volunteersCount, setVolunteersCount] = useState<number | null>(null);
@@ -11,12 +10,12 @@ export function MapPreview() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const [volunteersSnap, ngosSnap] = await Promise.all([
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"))),
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo")))
+        const [volunteersRes, ngosRes] = await Promise.all([
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["volunteer"]),
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["ngo"])
         ]);
-        setVolunteersCount(volunteersSnap.data().count);
-        setNgosCount(ngosSnap.data().count);
+        setVolunteersCount(volunteersRes.count);
+        setNgosCount(ngosRes.count);
       } catch (err) {
         console.error("Error fetching map preview stats:", err);
       }

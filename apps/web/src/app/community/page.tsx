@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { useCommunityFeed } from "@/lib/hooks/useCommunityFeed";
+import { canViewAdmin } from "@/lib/permissions";
 import { 
   MessageSquare, Heart, Share2, Send, Flame, Sparkles, 
   User, Calendar, Filter, HeartHandshake, BookOpen, Eye, AlertCircle,
@@ -56,9 +58,8 @@ export default function CommunityPage() {
   // ─────────────────────────────────────────────────────────────
   // FEED TAB STATE & EFFECTS
   // ─────────────────────────────────────────────────────────────
-  const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [postsLoading, setPostsLoading] = useState(true);
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const { posts, loading: postsLoading, refetch: fetchPosts, setPosts } = useCommunityFeed(filterCategory === "all" ? undefined : filterCategory);
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [likedPosts, setLikedPosts] = useState<string[]>([]);
   
@@ -67,6 +68,7 @@ export default function CommunityPage() {
   const [postCategory, setPostCategory] = useState<string>("general");
   const [postImage, setPostImage] = useState("");
   const [postTags, setPostTags] = useState("");
+  const [isPinned, setIsPinned] = useState(false);
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const [detectedHarsh, setDetectedHarsh] = useState<string[]>([]);
 
@@ -78,48 +80,11 @@ export default function CommunityPage() {
     }
   }, []);
 
-  const fetchPosts = async () => {
-    setPostsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("community_posts")
-        .select("*")
-        .order("is_pinned", { ascending: false })
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setPosts(data || []);
-    } catch (err) {
-      console.error("Failed to load community posts:", err);
-      // Fallback mocks
-      setPosts([
-        {
-          id: "mock-1",
-          author_id: "mock-author-1",
-          author_name: "Anjali Mehta",
-          author_avatar: "rescuer",
-          category: "rescue",
-          content: "Just released a healthy pigeon back to the wild today! Thanks to Pune volunteers for the rehabilitation assistance. 🕊️❤️",
-          image_url: "",
-          tags: ["rehab", "pigeon", "pune"],
-          city_name: "Pune",
-          like_count: 14,
-          comment_count: 3,
-          share_count: 2,
-          is_pinned: true,
-          created_at: new Date(Date.now() - 3600000).toISOString(),
-        }
-      ] as any);
-    } finally {
-      setPostsLoading(false);
-    }
-  };
-
   useEffect(() => {
     if (activeTab === "feed") {
       fetchPosts();
     }
-  }, [activeTab]);
+  }, [activeTab, filterCategory]);
 
   const handleTextChange = (text: string) => {
     setNewContent(text);
@@ -157,8 +122,8 @@ export default function CommunityPage() {
       const postCity = profile?.city_name || "India";
 
       const newPost = {
-        author_id: user.uid,
-        author_name: profile?.full_name || user.displayName || "EcoVerse Supporter",
+        author_id: user.id,
+        author_name: profile?.full_name || user.email || "EcoVerse Supporter",
         author_avatar: profile?.primary_role || "volunteer",
         category: postCategory,
         content: newContent.trim(),
@@ -168,15 +133,17 @@ export default function CommunityPage() {
         like_count: 0,
         comment_count: 0,
         share_count: 0,
-        is_pinned: false,
+        is_pinned: isPinned && canViewAdmin(profile),
         is_reported: detectedHarsh.length > 0,
         created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         ttl_days: 30
       };
 
-      const { error } = await supabase.from("community_posts").insert([newPost]);
-      if (error) throw error;
+      const { error: insertErr } = await supabase
+        .from("community_posts")
+        .insert(newPost);
+      if (insertErr) throw insertErr;
 
       toast.success("Post shared successfully!");
       setNewContent("");
@@ -215,10 +182,11 @@ export default function CommunityPage() {
     );
 
     try {
-      await supabase
+      const { error } = await supabase
         .from("community_posts")
         .update({ like_count: newLikeCount })
         .eq("id", post.id);
+      if (error) throw error;
     } catch (err) {
       console.error("Failed to sync like:", err);
     }
@@ -230,11 +198,10 @@ export default function CommunityPage() {
         .from("community_posts")
         .update({ is_reported: true })
         .eq("id", postId);
-
       if (error) throw error;
       toast.success("Post reported. Our moderators will review this.");
     } catch (err: any) {
-      toast.error("Report failed: " + err.message);
+      toast.error("Report failed: " + (err.message || err));
     }
   };
 
@@ -256,7 +223,7 @@ export default function CommunityPage() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setMembers(data || []);
+      setMembers(data as Profile[]);
     } catch (err) {
       console.error("Failed to load members:", err);
     } finally {
@@ -311,19 +278,21 @@ export default function CommunityPage() {
   const fetchVeganData = async () => {
     try {
       // 1. Leaderboard
-      const { data: board, error: boardErr } = await supabase
+      const { data: boardList, error: boardErr } = await supabase
         .from("profiles")
         .select("*")
         .order("vegan_streak_days", { ascending: false })
         .limit(10);
-      if (!boardErr) setVeganLeaderboard(board || []);
+      if (boardErr) throw boardErr;
+      setVeganLeaderboard(boardList as Profile[]);
 
       // 2. Pledge count
-      const { count, error: countErr } = await supabase
+      const { count, error: pledgeErr } = await supabase
         .from("profiles")
-        .select("*", { count: "exact", head: true })
+        .select("*", { count: 'exact', head: true })
         .eq("vegan_pledge_taken", true);
-      if (!countErr) setVeganPledgeCount(count || 0);
+      if (pledgeErr) throw pledgeErr;
+      setVeganPledgeCount(count || 0);
     } catch (err) {
       console.error("Failed to load vegan metrics:", err);
     }
@@ -346,15 +315,17 @@ export default function CommunityPage() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ vegan_pledge_taken: true, vegan_since: new Date().toISOString().split("T")[0] })
-        .eq("id", user.uid);
-
+        .update({
+          vegan_pledge_taken: true,
+          vegan_since: new Date().toISOString().split("T")[0]
+        })
+        .eq("id", user.id);
       if (error) throw error;
       toast.success("Thank you for taking the EcoVerse Vegan Pledge! 💚🌱");
       refetchProfile();
       fetchVeganData();
     } catch (err: any) {
-      toast.error("Action failed: " + err.message);
+      toast.error("Action failed: " + (err.message || err));
     }
   };
 
@@ -367,15 +338,16 @@ export default function CommunityPage() {
       const nextStreak = (profile.vegan_streak_days || 0) + 1;
       const { error } = await supabase
         .from("profiles")
-        .update({ vegan_streak_days: nextStreak })
-        .eq("id", user.uid);
-
+        .update({
+          vegan_streak_days: nextStreak
+        })
+        .eq("id", user.id);
       if (error) throw error;
       toast.success(`Day ${veganChallengeDay} Complete! Current Streak: ${nextStreak} Days 🔥`);
       refetchProfile();
       fetchVeganData();
     } catch (err: any) {
-      toast.error("Failed to save progress: " + err.message);
+      toast.error("Failed to save progress: " + (err.message || err));
     }
   };
 
@@ -403,13 +375,13 @@ export default function CommunityPage() {
     setEvents((prev) =>
       prev.map((ev) => {
         if (ev.id === eventId) {
-          const joined = ev.rsvpUsers.includes(user.uid);
+          const joined = ev.rsvpUsers.includes(user.id);
           return {
             ...ev,
             rsvps: joined ? ev.rsvps - 1 : ev.rsvps + 1,
             rsvpUsers: joined
-              ? ev.rsvpUsers.filter((uid: string) => uid !== user.uid)
-              : [...ev.rsvpUsers, user.uid],
+              ? ev.rsvpUsers.filter((uid: string) => uid !== user.id)
+              : [...ev.rsvpUsers, user.id],
           };
         }
         return ev;
@@ -431,7 +403,7 @@ export default function CommunityPage() {
       date: new Date(newEventDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
       type: newEventType,
       rsvps: 1,
-      rsvpUsers: user ? [user.uid] : [],
+      rsvpUsers: user ? [user.id] : [],
     };
     setEvents((prev) => [newEv, ...prev]);
     toast.success("Local event created successfully!");
@@ -548,14 +520,24 @@ export default function CommunityPage() {
                     let expiryColor = "rgba(255,255,255,0.2)";
                     if ((post as any).expires_at) {
                       const diff = new Date((post as any).expires_at).getTime() - Date.now();
-                      const daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
-                      if (daysLeft > 0) {
-                        expiryLabel = `⏱ Expires in ${daysLeft}d`;
-                        if (daysLeft > 14) expiryColor = "rgba(255,255,255,0.3)";
-                        else if (daysLeft >= 7) expiryColor = "#FBC02D"; // yellow
-                        else expiryColor = "#F57C00"; // orange
+                      if (diff > 0) {
+                        if (diff < 24 * 60 * 60 * 1000) {
+                          const hoursLeft = Math.floor(diff / (1000 * 60 * 60));
+                          const minsLeft = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                          expiryLabel = hoursLeft > 0 
+                            ? `⏱ Expires in ${hoursLeft}h ${minsLeft}m`
+                            : `⏱ Expires in ${minsLeft}m`;
+                          expiryColor = "#E53935"; // Red for expiring soon (< 24h)
+                        } else {
+                          const daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+                          expiryLabel = `⏱ Expires in ${daysLeft}d`;
+                          if (daysLeft > 14) expiryColor = "rgba(255,255,255,0.3)";
+                          else if (daysLeft >= 7) expiryColor = "#FBC02D"; // yellow
+                          else expiryColor = "#F57C00"; // orange
+                        }
                       }
                     }
+
 
                     // Role Details
                     const roleId = post.author_avatar || "volunteer";
@@ -719,7 +701,7 @@ export default function CommunityPage() {
                         {m.city_name || "India"}
                       </div>
                     </div>
-                    {user && user.uid !== m.id && (
+                    {user && user.id !== m.id && (
                       <button
                         onClick={() => handleSayWelcome(m.full_name || "Friend")}
                         style={{ background: "rgba(102,187,106,0.12)", border: "1px solid rgba(102,187,106,0.25)", color: "#A5D6A7", fontSize: "0.72rem", padding: "4px 10px", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
@@ -1303,6 +1285,19 @@ export default function CommunityPage() {
                   }}
                 />
               </div>
+
+              {/* Pinned toggle for admin */}
+              {canViewAdmin(profile) && (
+                <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", marginTop: "4px" }}>
+                  <input
+                    type="checkbox"
+                    checked={isPinned}
+                    onChange={(e) => setIsPinned(e.target.checked)}
+                    style={{ width: "16px", height: "16px", accentColor: "#66BB6A" }}
+                  />
+                  <span style={{ color: "#A5D6A7", fontWeight: 600 }}>Pin this post (Permanent)</span>
+                </label>
+              )}
 
               {/* Action buttons */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px", borderTop: "1px solid rgba(102,187,106,0.08)", paddingTop: "16px" }}>

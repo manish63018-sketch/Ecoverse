@@ -8,9 +8,9 @@ import {
   Mail, Phone, Send, MapPin, Sparkles, X, 
   CheckCircle2, Instagram, MessageSquare, AlertCircle
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import toast from "react-hot-toast";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+
 
 export default function ContactPage() {
   const [name, setName] = useState("");
@@ -28,13 +28,16 @@ export default function ContactPage() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "contact_inquiries"), {
-        name: name.trim(),
-        email: email.trim(),
-        subject,
-        message: message.trim(),
-        createdAt: serverTimestamp(),
-      });
+      const { error } = await supabase
+        .from("contact_inquiries")
+        .insert({
+          name: name.trim(),
+          email: email.trim(),
+          subject,
+          message: message.trim(),
+        });
+
+      if (error) throw error;
 
       toast.success("Message sent successfully! Our team will get back to you.");
       setName("");

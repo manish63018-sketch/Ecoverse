@@ -3,10 +3,9 @@
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { ArrowLeft, MapPin, Activity, Shield, Users, AlertCircle, Volume2, VolumeX, Search } from "lucide-react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import dynamic from "next/dynamic";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import PageHero from "@/components/PageHero";
@@ -98,52 +97,78 @@ export default function MapPage() {
   useEffect(() => {
     if (authLoading) return;
 
-    // 1. Count Volunteers
-    const qVolunteers = query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"));
-    const unsubVolunteers = onSnapshot(
-      qVolunteers,
-      (snapshot) => {
-        let count = 0;
-        snapshot.forEach((doc) => {
-          if (doc.data().volunteerInfo?.availableNow) count++;
-        });
-        setVolunteersCount(count || 2); // Fallback to 2 for visuals if empty
+    const countVolunteers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, roles, available_now")
+          .eq("available_now", true);
+
+        if (error) throw error;
+
+        const count = (data || []).filter((p: any) => p.roles?.includes("volunteer")).length;
+        setVolunteersCount(count || 2);
         setIsConnected(true);
-      },
-      (error) => {
-        console.warn("Firestore volunteer listener error:", error);
+      } catch (err) {
+        console.warn("Error counting volunteers:", err);
         setIsConnected(false);
       }
-    );
+    };
 
-    // 2. Count NGOs
-    const qNgos = query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo"));
-    const unsubNgos = onSnapshot(
-      qNgos,
-      (snapshot) => {
-        setNgosCount(snapshot.size);
-      },
-      (error) => {
-        console.warn("Firestore NGO listener error:", error);
-      }
-    );
+    const countNgos = async () => {
+      try {
+        const { count, error } = await supabase
+          .from("ngos")
+          .select("*", { count: "exact", head: true })
+          .eq("is_active", true);
 
-    // 3. Count Open Rescues
-    const qRescues = query(collection(db, "rescues"), where("status", "in", ["reported", "dispatched", "in_progress"]));
-    const unsubRescues = onSnapshot(
-      qRescues,
-      (snapshot) => {
-        setRescuesCount(snapshot.size);
-      },
-      (error) => {
-        console.warn("Firestore rescues listener error:", error);
+        if (error) throw error;
+        setNgosCount(count || 0);
+      } catch (err) {
+        console.warn("Error counting NGOs:", err);
       }
-    );
+    };
+
+    const countRescues = async () => {
+      try {
+        const { count, error } = await supabase
+          .from("rescue_cases")
+          .select("*", { count: "exact", head: true })
+          .in("status", ["open", "assigned", "in_progress", "escalated"]);
+
+        if (error) throw error;
+        setRescuesCount(count || 0);
+      } catch (err) {
+        console.warn("Error counting rescues:", err);
+      }
+    };
+
+    countVolunteers();
+    countNgos();
+    countRescues();
+
+    // Subscribe to realtime updates
+    const channel = supabase
+      .channel("map-stats-updates")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles" },
+        () => countVolunteers()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "ngos" },
+        () => countNgos()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "rescue_cases" },
+        () => countRescues()
+      )
+      .subscribe();
 
     return () => {
-      unsubVolunteers();
-      unsubNgos();
-      unsubRescues();
+      supabase.removeChannel(channel);
     };
   }, [user, authLoading]);
 

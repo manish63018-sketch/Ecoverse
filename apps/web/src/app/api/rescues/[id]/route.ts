@@ -2,24 +2,10 @@
 // Update a rescue case (e.g. mark it as resolved or closed)
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { db } from '@/lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
-function mapPostgresStatusToFirestore(status: string): string {
-  switch (status) {
-    case 'open':
-      return 'reported';
-    case 'in_progress':
-      return 'in_progress';
-    case 'resolved':
-    case 'closed':
-      return 'resolved';
-    default:
-      return 'reported';
-  }
-}
+
 
 export async function PATCH(
   req: NextRequest,
@@ -59,15 +45,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Rescue case not found' }, { status: 404 });
     }
 
-    // Sync to Firestore rescues collection
-    try {
-      const firestoreStatus = mapPostgresStatusToFirestore(body.status);
-      await updateDoc(doc(db, 'rescues', id), {
-        status: firestoreStatus
-      });
-    } catch (fsErr) {
-      console.warn('[API] Failed to update rescue in Firestore:', fsErr);
-    }
+
 
     return NextResponse.json({ success: true, case: rows[0] });
   } catch (err) {

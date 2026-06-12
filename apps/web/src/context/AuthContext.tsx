@@ -1,23 +1,31 @@
-"use client";
+'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User as SupabaseUser } from "@supabase/supabase-js";
+/**
+ * "Supabase is the only source of truth for authentication and app data."
+ */
+
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Profile } from "@/lib/types";
+import { signUp, signIn } from "@/lib/auth";
 
-export type AuthUser = SupabaseUser & {
-  uid: string;
-  displayName: string | null;
-  photoURL: string | null;
-};
+export type AuthUser = any;
 
 interface AuthContextType {
   user: AuthUser | null;
   profile: Profile | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
-  signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<any>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    fullName: string,
+    username: string,
+    role: string,
+    city: string,
+    state: string
+  ) => Promise<any>;
   logout: () => Promise<void>;
   refetchProfile: () => Promise<void>;
 }
@@ -29,44 +37,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", userId)
-        .single();
-      if (error) {
-        console.warn("Profile fetch error in AuthProvider:", error.message);
-        setProfile(null);
-        return null;
-      } else {
-        setProfile(data);
-        return data;
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) {
+        setProfile(data as Profile);
+        return data as Profile;
       }
+      setProfile(null);
+      return null;
     } catch (err) {
       console.error("Profile fetch error in AuthProvider:", err);
       setProfile(null);
       return null;
     }
-  };
-
-  const getMappedUser = (sUser: SupabaseUser, prof: Profile | null): AuthUser => {
-    return {
-      ...sUser,
-      uid: sUser.id,
-      displayName: prof?.full_name || sUser.user_metadata?.full_name || "EcoVerse User",
-      photoURL: prof?.avatar_url || sUser.user_metadata?.avatar_url || null,
-    };
-  };
+  }, []);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      if (currentUser) {
-        const prof = await fetchProfile(currentUser.id);
-        setUser(getMappedUser(currentUser, prof));
+    let mounted = true;
+
+    // Get current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setUser(session.user);
+        fetchProfile(session.user.id).then(() => {
+          if (mounted) setLoading(false);
+        });
+      } else {
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+
+    // Listen to changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setUser(session.user);
+        await fetchProfile(session.user.id);
       } else {
         setUser(null);
         setProfile(null);
@@ -74,22 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        const currentUser = session?.user ?? null;
-        if (currentUser) {
-          const prof = await fetchProfile(currentUser.id);
-          setUser(getMappedUser(currentUser, prof));
-        } else {
-          setUser(null);
-          setProfile(null);
-        }
-        setLoading(false);
-      }
-    );
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    }
+  }, [fetchProfile]);
 
   const signInWithGoogle = async () => {
     try {
@@ -97,8 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
+          redirectTo: `${window.location.origin}/auth/login`,
+        }
       });
       if (error) throw error;
     } catch (error) {
@@ -112,38 +117,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithEmail = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
-    } catch (error) {
-      console.error("Error signing in with Email/Password:", error);
-      throw error;
+      const user = await signIn(email, password);
+      return user;
     } finally {
       setLoading(false);
     }
   };
 
-  const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
+  const signUpWithEmail = async (
+    email: string,
+    password: string,
+    fullName: string,
+    username: string,
+    role: string,
+    city: string,
+    state: string
+  ) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: displayName || "EcoVerse User",
-            username: displayName
-              ? displayName.toLowerCase().replace(/\s+/g, "_").slice(0, 40) + "_" + Math.floor(Math.random() * 1000)
-              : "user_" + Math.floor(Math.random() * 1000000),
-          },
-        },
-      });
-      if (error) throw error;
-    } catch (error) {
-      console.error("Error signing up with Email/Password:", error);
-      throw error;
+      const user = await signUp(email, password, fullName, username, role, city, state);
+      return user;
     } finally {
       setLoading(false);
     }
@@ -165,11 +158,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refetchProfile = async () => {
-    const session = await supabase.auth.getSession();
-    const currentUser = session.data.session?.user;
-    if (currentUser) {
-      const prof = await fetchProfile(currentUser.id);
-      setUser(getMappedUser(currentUser, prof));
+    if (user) {
+      await fetchProfile(user.id);
     }
   };
 
@@ -191,10 +181,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
+export function useAuthContext() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error("useAuthContext must be used within an AuthProvider");
   }
   return context;
 }

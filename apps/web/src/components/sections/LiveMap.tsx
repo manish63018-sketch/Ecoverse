@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { INDIAN_CITIES } from "@/lib/cities";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
+import { cities, areas } from "@/lib/locations-data";
 
 interface MapElement {
   id: string;
@@ -14,6 +14,38 @@ interface MapElement {
   label: string;
   details?: string;
   severity?: string;
+}
+
+function getCityCoords(cityName?: string): { lat: number; lng: number } {
+  if (!cityName) return { lat: 20.5937, lng: 78.9629 };
+  const normalized = cityName.toLowerCase().trim();
+  if (normalized.includes("hyderabad")) return { lat: 17.3850, lng: 78.4867 };
+  if (normalized.includes("mumbai")) return { lat: 19.0760, lng: 72.8777 };
+  if (normalized.includes("delhi")) return { lat: 28.7041, lng: 77.1025 };
+  if (normalized.includes("bengaluru") || normalized.includes("bangalore")) return { lat: 12.9716, lng: 77.5946 };
+  if (normalized.includes("chennai")) return { lat: 13.0827, lng: 80.2707 };
+  if (normalized.includes("kolkata")) return { lat: 22.5726, lng: 88.3639 };
+  
+  const seed = normalized.charCodeAt(0) + (normalized.charCodeAt(1) || 0);
+  const lat = 10 + (seed % 18);
+  const lng = 71 + (seed % 16);
+  return { lat, lng };
+}
+
+function resolveMemberCoords(cityName?: string, areaName?: string): { lat: number; lng: number } {
+  if (areaName) {
+    const foundArea = areas.find(a => a.name.toLowerCase().trim() === areaName.toLowerCase().trim());
+    if (foundArea && foundArea.lat && foundArea.lng) {
+      return { lat: foundArea.lat, lng: foundArea.lng };
+    }
+  }
+  if (cityName) {
+    const foundCity = cities.find(c => c.name.toLowerCase().trim() === cityName.toLowerCase().trim() || c.slug === cityName.toLowerCase().trim());
+    if (foundCity && foundCity.lat && foundCity.lng) {
+      return { lat: foundCity.lat, lng: foundCity.lng };
+    }
+  }
+  return getCityCoords(cityName);
 }
 
 export default function LiveMap() {
@@ -29,107 +61,91 @@ export default function LiveMap() {
   // Keep track of active layers/markers to clear them on updates
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
 
-  // Subscribe to Firestore collections in real-time or fall back to mock data
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [volsRes, ngosRes, rescuesRes] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select("id, full_name, city_name, area_name, verification_status, roles, available_now"),
+          supabase
+            .from("ngos")
+            .select("id, name, city_name, state_name"),
+          supabase
+            .from("rescue_cases")
+            .select("*")
+            .in("status", ["open", "assigned", "in_progress", "escalated"])
+        ]);
 
-    // 1. Listen to Available Volunteers
-    const qVolunteers = query(
-      collection(db, "public_profiles"),
-      where("roles", "array-contains", "volunteer")
-    );
-    const unsubVolunteers = onSnapshot(
-      qVolunteers,
-      (snapshot) => {
-        const list: MapElement[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.volunteerInfo?.availableNow && data.volunteerInfo?.currentLocation) {
-            list.push({
-              id: doc.id,
-              type: "volunteer",
-              lat: data.volunteerInfo.currentLocation.latitude,
-              lng: data.volunteerInfo.currentLocation.longitude,
-              label: data.displayName || "Anonymous Volunteer",
-              details: `Skills: ${data.volunteerInfo.skills?.join(", ") || "None"}`
+        if (volsRes.data) {
+          const vols = volsRes.data
+            .filter((m: any) => m.roles?.includes("volunteer") && (m.available_now || m.verification_status === "verified"))
+            .map((m: any) => {
+              const coords = resolveMemberCoords(m.city_name, m.area_name);
+              const jitterLat = (Math.random() - 0.5) * 0.012;
+              const jitterLng = (Math.random() - 0.5) * 0.012;
+              return {
+                id: m.id,
+                type: "volunteer" as const,
+                lat: coords.lat + jitterLat,
+                lng: coords.lng + jitterLng,
+                label: m.full_name || "Volunteer",
+                details: "Status: Online & Ready",
+              };
             });
-          }
-        });
-        setVolunteers(list);
-      },
-      (error) => {
-        console.warn("Failed to listen to volunteers:", error);
-      }
-    );
+          setVolunteers(vols);
+        }
 
-    // 2. Listen to NGO partners
-    const qNgos = query(
-      collection(db, "public_profiles"),
-      where("roles", "array-contains", "ngo")
-    );
+        if (ngosRes.data) {
+          const ngoList = ngosRes.data.map((n: any) => {
+            const coords = n.lat && n.lng
+              ? { lat: Number(n.lat), lng: Number(n.lng) }
+              : resolveMemberCoords(n.city_name);
+            const jitterLat = (Math.random() - 0.5) * 0.008;
+            const jitterLng = (Math.random() - 0.5) * 0.008;
+            return {
+              id: n.id,
+              type: "ngo" as const,
+              lat: coords.lat + jitterLat,
+              lng: coords.lng + jitterLng,
+              label: n.name || "Partner NGO",
+              details: "Stray Animal Support Center",
+            };
+          });
+          setNgos(ngoList);
+        }
 
-    const unsubNgos = onSnapshot(
-      qNgos,
-      (snapshot) => {
-        const list: MapElement[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.ngoInfo) {
-            list.push({
-              id: doc.id,
-              type: "ngo",
-              lat: data.volunteerInfo?.currentLocation?.latitude || 17.4421, // fallback to Hyderabad center
-              lng: data.volunteerInfo?.currentLocation?.longitude || 78.3812,
-              label: data.ngoInfo.orgName || "Partner NGO",
-              details: `Cause: ${data.ngoInfo.causeType || "Stray welfare"}`
-            });
-          }
-        });
-        setNgos(list);
-      },
-      (error) => {
-        console.warn("Failed to listen to NGOs:", error);
-      }
-    );
+        if (rescuesRes.data) {
+          const activeRescues = rescuesRes.data.map((rc: any) => {
+            const coords = rc.area_lat && rc.area_lng 
+              ? { lat: Number(rc.area_lat), lng: Number(rc.area_lng) }
+              : resolveMemberCoords(rc.city_name || rc.city_id);
 
-    // 3. Listen to Open Rescues
-    const qRescues = query(
-      collection(db, "rescues"),
-      where("status", "in", ["reported", "dispatched", "in_progress"])
-    );
-    const unsubRescues = onSnapshot(
-      qRescues,
-      (snapshot) => {
-        const list: MapElement[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.location) {
-            // Add a random jitter offset (+/- 0.003 degrees, about ~300 meters) for reporter privacy
             const jitterLat = (Math.random() - 0.5) * 0.006;
             const jitterLng = (Math.random() - 0.5) * 0.006;
-            
-            list.push({
-              id: doc.id,
-              type: "rescue",
-              lat: data.location.latitude + jitterLat,
-              lng: data.location.longitude + jitterLng,
-              label: `SOS: ${data.animalType.toUpperCase()}`,
-              details: data.conditionDescription,
-              severity: data.severity
-            });
-          }
-        });
-        setRescues(list);
-      },
-      (error) => {
-        console.warn("Failed to listen to rescues:", error);
-      }
-    );
 
-    return () => {
-      unsubVolunteers();
-      unsubNgos();
-      unsubRescues();
+            return {
+              id: rc.id,
+              type: "rescue" as const,
+              lat: coords.lat + jitterLat,
+              lng: coords.lng + jitterLng,
+              label: `SOS: ${(rc.animal_type || "Animal").toUpperCase()}`,
+              details: rc.condition_summary || rc.description || "Emergency case",
+              severity: rc.emergency_level || "medium",
+            };
+          });
+          setRescues(activeRescues);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch map data:", err);
+      }
     };
+
+    fetchData();
+
+    // Poll every 15 seconds
+    const interval = setInterval(fetchData, 15000);
+    return () => clearInterval(interval);
   }, [user]);
 
   // Initialize Leaflet Map

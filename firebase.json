@@ -13,20 +13,33 @@
       }
     }
   },
-  "hosting": {
-    "site": "ecoverseindia",
-    "public": "apps/web/out",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "cleanUrls": true,
-    "trailingSlash": true,
-    "rewrites": [
-      { "source": "/adopt/!(fallback|*.js|*.css|*.png|*.jpg|*.svg|*.ico|*.json)", "destination": "/adopt/fallback.html" },
-      { "source": "/rescue/!(fallback|*.js|*.css|*.png|*.jpg|*.svg|*.ico|*.json)", "destination": "/rescue/fallback.html" }
-    ]
-  }
+  "hosting": [
+    {
+      "site": "ecoverseindia",
+      "public": "apps/web/out",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "rewrites": [
+        { "source": "/adopt/!(fallback|*.js|*.css|*.png|*.jpg|*.svg|*.ico|*.json)", "destination": "/adopt/fallback.html" },
+        { "source": "/rescue/!(fallback|*.js|*.css|*.png|*.jpg|*.svg|*.ico|*.json)", "destination": "/rescue/fallback.html" }
+      ]
+    },
+    {
+      "site": "ecoverse-67a5e",
+      "public": "apps/web/out",
+      "redirects": [
+        {
+          "source": "**",
+          "destination": "https://ecoverseindia.web.app",
+          "type": 301
+        }
+      ]
+    }
+  ]
 }
 

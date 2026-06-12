@@ -12,8 +12,6 @@
 // ═══════════════════════════════════════════════════════════════
 import { query } from './db';
 import type { RescueCase } from '@/types/rescue';
-import { db } from './firebase';
-import { doc, updateDoc } from 'firebase/firestore';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -81,13 +79,7 @@ async function logEscalation(
       WHERE id = $1
     `, [rescueCaseId]);
 
-    try {
-      await updateDoc(doc(db, 'rescues', rescueCaseId), {
-        status: 'escalated'
-      });
-    } catch (fsErr) {
-      console.warn('[AlertEngine] Failed to sync NGO escalation to Firestore:', fsErr);
-    }
+
   }
 }
 
@@ -417,13 +409,6 @@ export async function recordVolunteerResponse(
         AND status IN ('open', 'escalated')
     `, [volunteerId, rescueCaseId]);
 
-    try {
-      await updateDoc(doc(db, 'rescues', rescueCaseId), {
-        status: 'dispatched',
-        assignedVolunteerId: volunteerId
-      });
-    } catch (fsErr) {
-      console.warn('[AlertEngine] Failed to sync volunteer assignment to Firestore:', fsErr);
-    }
+
   }
 }

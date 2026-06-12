@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { useProfile } from "@/lib/hooks/useProfile";
 import { useRouter } from "next/navigation";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { ArrowLeft, User, Bell, Lock, Heart, Save } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -52,10 +52,10 @@ const ALL_SKILLS = [
 const ROLE_OPTIONS = [
   { id: "rescuer", emoji: "🐾", label: "Rescuer" },
   { id: "adopter", emoji: "🏡", label: "Adopter" },
-  { id: "vegan", emoji: "🌱", label: "Vegan / Animal Lover" },
+  { id: "vegan_advocate", emoji: "🌱", label: "Vegan / Animal Lover" },
   { id: "volunteer", emoji: "🤝", label: "Volunteer" },
   { id: "feeder", emoji: "🐦", label: "Feeder / Caretaker" },
-  { id: "ngo", emoji: "🏢", label: "NGO / Organization" },
+  { id: "ngo_staff", emoji: "🏢", label: "NGO Staff" },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -64,71 +64,65 @@ export default function SettingsPage() {
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<TabId>("profile");
+  const { data: rawProfile, loading: profileLoading, refetch } = useProfile(user?.id);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) router.push("/login");
+    if (!loading && !user) router.push("/auth/login");
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (!user) return;
-    const load = async () => {
-      try {
-        const snap = await getDoc(doc(db, "users", user.uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          setSettings({
-            displayName: data.displayName || "",
-            bio: data.bio || "",
-            city: data.city || "",
-            instagramHandle: data.instagramHandle || "",
-            roles: data.roles || [],
-            availableNow: data.availableNow ?? false,
-            rescueRadiusKm: data.rescueRadiusKm ?? 10,
-            skills: data.skills || [],
-            notificationPreferences: data.notificationPreferences ?? {
-              rescueSos: true,
-              adoptionListings: true,
-              volunteerRequests: true,
-              weeklyDigest: true,
-              sound: true,
-            },
-            privacyPreferences: data.privacyPreferences ?? {
-              profileVisibility: "public",
-              showCity: true,
-              allowMessages: "members",
-              showOnlineStatus: true,
-            },
-          });
-        }
-      } catch (err) {
-        toast.error("Failed to load settings");
-      } finally {
-        setSettingsLoading(false);
-      }
-    };
-    load();
-  }, [user]);
+    if (rawProfile) {
+      setSettings({
+        displayName: rawProfile.full_name || "",
+        bio: rawProfile.bio || "",
+        city: rawProfile.city_name || "",
+        instagramHandle: rawProfile.instagram_handle || "",
+        roles: rawProfile.roles || [],
+        availableNow: rawProfile.available_now || false,
+        rescueRadiusKm: rawProfile.rescue_radius_km || 10,
+        skills: rawProfile.skills || [],
+        notificationPreferences: {
+          rescueSos: true,
+          adoptionListings: true,
+          volunteerRequests: true,
+          weeklyDigest: true,
+          sound: true,
+        },
+        privacyPreferences: {
+          profileVisibility: "public",
+          showCity: true,
+          allowMessages: "members",
+          showOnlineStatus: true,
+        },
+      });
+      setSettingsLoading(false);
+    }
+  }, [rawProfile]);
 
   const saveSettings = async () => {
     if (!user || !settings) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, "users", user.uid), {
-        displayName: settings.displayName,
-        bio: settings.bio,
-        city: settings.city,
-        instagramHandle: settings.instagramHandle,
-        roles: settings.roles,
-        availableNow: settings.availableNow,
-        rescueRadiusKm: settings.rescueRadiusKm,
-        skills: settings.skills,
-        notificationPreferences: settings.notificationPreferences,
-        privacyPreferences: settings.privacyPreferences,
-        updatedAt: new Date().toISOString(),
-      });
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          full_name: settings.displayName,
+          bio: settings.bio,
+          city_name: settings.city,
+          instagram_handle: settings.instagramHandle,
+          roles: settings.roles,
+          available_now: settings.availableNow,
+          rescue_radius_km: settings.rescueRadiusKm,
+          skills: settings.skills,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+      refetch();
       toast.success("Settings saved ✅");
     } catch (err) {
       toast.error("Failed to save settings");

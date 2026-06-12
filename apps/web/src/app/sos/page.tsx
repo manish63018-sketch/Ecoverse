@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
 import {
   AlertCircle, MapPin, Send, ArrowLeft, Phone,
   Shield, ChevronRight, Zap, Info
@@ -10,11 +10,9 @@ import {
 import Link from "next/link";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
-import { db } from "@/lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
 import type { LocationSelection } from "@/types/location";
 import type { EmergencyLevel } from "@/types/rescue";
-import { getApiUrl } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 const LeafletMapPicker = dynamic(
   () => import("@/components/sections/MapPicker"),
@@ -41,7 +39,7 @@ const ANIMAL_ICONS: Record<string, string> = {
 };
 
 export default function SOSReportPage() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const router = useRouter();
 
   // Form state
@@ -103,16 +101,20 @@ export default function SOSReportPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(getApiUrl("/api/rescues"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reporter_user_id: user?.uid ?? null,
-          state_id: locationSelection.stateId,
-          city_id:  locationSelection.cityId,
-          area_id:  locationSelection.areaId,
-          exact_lat: latitude,
-          exact_lng: longitude,
+      const areaLat = latitude != null ? Math.round(latitude * 100) / 100 : null;
+      const areaLng = longitude != null ? Math.round(longitude * 100) / 100 : null;
+
+      const { data, error } = await supabase
+        .from("rescue_cases")
+        .insert({
+          reporter_id: user?.id ?? null,
+          reporter_name: profile?.full_name || user?.email || 'Ecoverse User',
+          state_name: locationSelection.stateName,
+          city_name: locationSelection.cityName,
+          area_name: locationSelection.areaName,
+          display_zone: locationSelection.displayZone || `${locationSelection.areaName}, ${locationSelection.cityName}, ${locationSelection.stateName}`,
+          area_lat: areaLat,
+          area_lng: areaLng,
           animal_type: animalType,
           condition_summary: condition,
           emergency_level: severity,
@@ -121,40 +123,13 @@ export default function SOSReportPage() {
             address ? `Landmark: ${address}` : "",
             phone ? `Reporter phone: ${phone}` : "",
           ].filter(Boolean).join("\n"),
-          reporter_name: user?.displayName || 'Ecoverse User',
-          reporter_phone: phone || 'Not provided',
-        }),
-      });
+          status: "open",
+        })
+        .select()
+        .single();
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to submit rescue report");
-      }
-
-      // Sync to Firestore on the client side
-      try {
-        const newCase = data.case;
-        await setDoc(doc(db, "rescues", newCase.id), {
-          caseId: newCase.id,
-          reporterId: user?.uid ?? "anonymous",
-          reporterContact: {
-            name: user?.displayName || "Ecoverse User",
-            phone: phone || "Not provided",
-          },
-          animalType: animalType,
-          conditionDescription: condition || "No description provided",
-          severity: severity,
-          status: "reported",
-          location: {
-            latitude: latitude,
-            longitude: longitude,
-            addressText: newCase.display_zone || locationSelection.areaName,
-          },
-          createdAt: newCase.created_at || new Date().toISOString(),
-        });
-      } catch (fsErr) {
-        console.error("Client failed to sync new case to Firestore:", fsErr);
+      if (error) {
+        throw error;
       }
 
       toast.success(

@@ -9,7 +9,7 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-url.supabase.co";
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ecoverseindia.supabase.co";
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
   const supabase = createServerClient(
@@ -34,23 +34,38 @@ export async function proxy(request: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const protectedPaths = ["/dashboard", "/profile", "/settings", "/admin"];
+  const protectedPaths = ["/dashboard", "/profile", "/settings", "/admin", "/moderation"];
   const adminPaths = ["/admin"];
+  const modPaths = ["/moderation"];
   const path = request.nextUrl.pathname;
 
   if (protectedPaths.some((p) => path.startsWith(p)) && !session) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (adminPaths.some((p) => path.startsWith(p)) && session) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", session.user.id)
-      .single();
+  if (session) {
+    if (adminPaths.some((p) => path.startsWith(p))) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", session.user.id)
+        .single();
 
-    if (!profile?.is_admin) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      if (!profile?.is_admin) {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
+    }
+
+    if (modPaths.some((p) => path.startsWith(p))) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_admin, is_moderator")
+        .eq("id", session.user.id)
+        .single();
+
+      if (!profile?.is_admin && !profile?.is_moderator) {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
     }
   }
 
@@ -95,6 +110,7 @@ export const config = {
     "/profile/:path*",
     "/settings/:path*",
     "/admin/:path*",
+    "/moderation/:path*",
     "/api/:path*",
   ],
 };

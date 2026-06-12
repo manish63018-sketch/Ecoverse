@@ -7,8 +7,6 @@ import { query } from '@/lib/db';
 import { validateLocationHierarchy, buildDisplayZone, getUserLocationProfile } from '@/lib/location';
 import { alertVolunteersForCase } from '@/lib/alertEngine';
 import type { CreateRescueBody, RescueCase } from '@/types/rescue';
-import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,31 +106,7 @@ export async function POST(req: NextRequest) {
 
   const newCase = rows[0];
 
-  // Sync to Firestore rescues collection
-  try {
-    const reporterName = body.reporter_name || 'Ecoverse User';
-    const reporterPhone = body.reporter_phone || body.phone || 'Not provided';
-    await setDoc(doc(db, 'rescues', newCase.id), {
-      caseId: newCase.id,
-      reporterId: newCase.reporter_user_id ?? 'anonymous',
-      reporterContact: {
-        name: reporterName,
-        phone: reporterPhone,
-      },
-      animalType: newCase.animal_type,
-      conditionDescription: newCase.condition_summary || newCase.description || 'No description provided',
-      severity: newCase.emergency_level,
-      status: 'reported',
-      location: {
-        latitude: areaLat ?? 17.4156,
-        longitude: areaLng ?? 78.4347,
-        addressText: newCase.display_zone,
-      },
-      createdAt: newCase.created_at,
-    });
-  } catch (fsErr) {
-    console.error('[API] Failed to sync new rescue case to Firestore:', fsErr);
-  }
+
 
   // ── 7. Trigger area-level alerts (async — does NOT block response) ──
   // The alert engine runs the 4-step cascade in the background

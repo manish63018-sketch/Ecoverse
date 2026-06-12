@@ -5,7 +5,7 @@ const isStaticExport = process.env.NEXT_PUBLIC_BUILD_TARGET === "static";
 
 const nextConfig: NextConfig = {
   output: isStaticExport ? "export" : undefined,
-  trailingSlash: true,
+  trailingSlash: false,
   images: {
     unoptimized: isStaticExport ? true : undefined,
     remotePatterns: [

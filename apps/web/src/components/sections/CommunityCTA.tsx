@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
-import { collection, query, where, getCountFromServer } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 
 export function CommunityCTA() {
   const [email, setEmail] = useState("");
@@ -21,21 +20,21 @@ export function CommunityCTA() {
   useEffect(() => {
     async function loadCounts() {
       try {
-        const [rescuerSnap, veganSnap, adopterSnap, ngoSnap, feederSnap, volunteerSnap] = await Promise.all([
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "rescuer"))),
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "vegan"))),
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "adopter"))),
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo"))),
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "feeder"))),
-          getCountFromServer(query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"))),
+        const [rescuerRes, veganRes, adopterRes, ngoRes, feederRes, volunteerRes] = await Promise.all([
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["rescuer"]),
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["vegan"]),
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["adopter"]),
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["ngo"]),
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["feeder"]),
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["volunteer"]),
         ]);
         setCounts({
-          rescuer: rescuerSnap.data().count,
-          vegan: veganSnap.data().count,
-          adopter: adopterSnap.data().count,
-          ngo: ngoSnap.data().count,
-          feeder: feederSnap.data().count,
-          volunteer: volunteerSnap.data().count,
+          rescuer: rescuerRes.count,
+          vegan: veganRes.count,
+          adopter: adopterRes.count,
+          ngo: ngoRes.count,
+          feeder: feederRes.count,
+          volunteer: volunteerRes.count,
         });
       } catch (err) {
         console.error("Error loading community CTA counts:", err);

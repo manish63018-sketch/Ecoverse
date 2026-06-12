@@ -3,9 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
-import { doc, setDoc, collection, onSnapshot } from "firebase/firestore";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import { Sparkles, Heart, Flame, ShieldCheck, Check, Info } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -16,28 +15,55 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listen to real-time vegan pledges count
-    const unsubscribe = onSnapshot(
-      collection(db, "vegan_pledges"),
-      (snapshot) => {
-        setPledgeCount(snapshot.size);
-        setLoading(false);
-        
+    const fetchPledgeStats = async () => {
+      try {
+        const { count, error } = await supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .eq("vegan_pledge_taken", true);
+
+        if (error) throw error;
+        setPledgeCount(count || 0);
+
         if (user) {
-          // Check if current user has already pledged
-          const userPledged = snapshot.docs.some(
-            (doc) => doc.id === `${user.uid}_pledge`
-          );
-          setHasPledged(userPledged);
+          const { data: prof, error: profError } = await supabase
+            .from("profiles")
+            .select("vegan_pledge_taken")
+            .eq("id", user.id)
+            .single();
+
+          if (!profError && prof) {
+            setHasPledged(prof.vegan_pledge_taken);
+          }
         }
-      },
-      (error) => {
-        console.warn("Failed to listen to vegan pledges:", error);
+      } catch (err) {
+        console.warn("Failed to fetch vegan pledge stats:", err);
+      } finally {
         setLoading(false);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    fetchPledgeStats();
+
+    // Subscribe to realtime updates
+    const channel = supabase
+      .channel("vegan-pledges-channel")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
+        },
+        () => {
+          fetchPledgeStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const handleTakePledge = async () => {
@@ -47,15 +73,19 @@ export default function CampaignsPage() {
     }
 
     try {
-      const pledgeRef = doc(db, "vegan_pledges", `${user.uid}_pledge`);
-      await setDoc(pledgeRef, {
-        pledgeId: `${user.uid}_pledge`,
-        uid: user.uid,
-        city: "hyderabad", // Default city selection
-        createdAt: new Date().toISOString()
-      });
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          vegan_pledge_taken: true,
+          vegan_since: new Date().toISOString().split("T")[0]
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
       toast.success("Thank you for taking the EcoVerse Vegan Pledge! 💚");
       setHasPledged(true);
+      setPledgeCount(prev => prev + 1);
     } catch (err) {
       console.error("Failed to save vegan pledge:", err);
       toast.error("Could not register pledge. Please try again.");

@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+.firebase
+.vercel
+.git
+out
+dist
+build
+.pnpm-store
+jspm_packages
+*.log

@@ -3,11 +3,10 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { ArrowLeft, CheckCircle2, Shield, Heart, MapPin, ClipboardList, Info, Mail, Phone, User, Home, X } from "lucide-react";
 import toast from "react-hot-toast";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 
@@ -48,40 +47,43 @@ export default function PetDetailPage() {
   useEffect(() => {
     if (!id) return;
 
-    const docRef = doc(db, "adoption_pets", id);
-    const unsubscribe = onSnapshot(
-      docRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          setPet(docSnap.data() as AdoptionPet);
-        } else {
+    const fetchPet = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("adoptions")
+          .select("*")
+          .eq("id", id)
+          .single();
+
+        if (error) throw error;
+
+        if (data) {
           setPet({
-            id: id,
-            name: "Bruno",
-            type: "dog",
-            breed: "Indie Dog",
-            age: "2 years",
-            ageGroup: "adult",
-            gender: "Male",
-            location: "Banjara Hills",
-            city: "Hyderabad",
-            state: "Telangana",
-            vaccinated: true,
-            neutered: true,
-            story: "Bruno was rescued from an open drainage ditch when he was a tiny puppy. He is energetic, extremely friendly with other dogs, loves kids, and is looking for a loving home with a fenced yard.",
+            id: data.id,
+            name: data.name,
+            type: data.animal_type || "other",
+            breed: data.breed || "Mixed Breed",
+            age: data.age_years ? `${data.age_years} years` : data.age_months ? `${data.age_months} months` : "Unknown age",
+            ageGroup: data.age_years && data.age_years > 7 ? "senior" : data.age_years && data.age_years >= 1 ? "adult" : "puppy_kitten",
+            gender: data.gender === "Female" ? "Female" : "Male",
+            location: data.area_name || "Unknown",
+            city: data.city_name || "Unknown",
+            state: data.state_name || "India",
+            vaccinated: !!data.vaccinated,
+            neutered: !!data.neutered,
+            story: data.description || "No description provided.",
             imageColor: "linear-gradient(135deg, #FF9D6C 0%, #BB4E75 100%)",
-            emoji: "🐕",
+            emoji: data.animal_type === "dog" ? "🐕" : data.animal_type === "cat" ? "🐈" : "🐾",
           });
         }
-        setLoading(false);
-      },
-      (err) => {
-        console.warn("Failed to stream pet detail:", err);
+      } catch (err) {
+        console.warn("Failed to fetch pet detail:", err);
+      } finally {
         setLoading(false);
       }
-    );
+    };
 
-    return () => unsubscribe();
+    fetchPet();
   }, [id]);
 
   const handleInterestSubmit = (e: React.FormEvent) => {

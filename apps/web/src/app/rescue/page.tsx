@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { ArrowLeft, Plus, Shield, Search, Filter, Layers, Navigation, X, Upload, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";

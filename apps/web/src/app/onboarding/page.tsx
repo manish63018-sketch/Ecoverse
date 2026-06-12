@@ -1,14 +1,17 @@
 "use client";
 
+/**
+ * "Supabase is the only source of truth for authentication and app data."
+ */
+
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
+import { getApiUrl } from "@/lib/api";
 import { INDIAN_CITIES } from "@/lib/cities";
 import {
   Shield,
-  Heart,
   Leaf,
   Users,
   Building2,
@@ -17,7 +20,6 @@ import {
   ChevronLeft,
   Check,
   MapPin,
-  Clock,
   Home,
   CheckSquare
 } from "lucide-react";
@@ -41,7 +43,7 @@ const roleOptions: RoleOption[] = [
 ];
 
 export default function OnboardingPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, refetchProfile } = useAuth();
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -77,16 +79,16 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push("/login");
+      router.push("/auth/login");
     } else if (user) {
-      setDisplayName(user.displayName || "");
+      setDisplayName(user.user_metadata?.full_name || "");
     }
   }, [user, loading, router]);
 
   if (loading || !user) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0F1A10", color: "#FFFFFF" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", margin: "auto" }}>
           <div className="spinner"></div>
           <p style={{ color: "rgba(232, 245, 233, 0.6)" }}>Loading setup wizard...</p>
           <style>{`.spinner { width: 32px; height: 32px; border: 2px solid rgba(102,187,106,0.2); border-radius: 50%; border-top-color: #66BB6A; animation: spin 0.8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -161,112 +163,33 @@ export default function OnboardingPage() {
   const handleSubmit = async () => {
     try {
       setSaving(true);
-      const userRef = doc(db, "users", user.uid);
 
-      const profilePayload: any = {
-        uid: user.uid,
-        displayName,
-        email: user.email,
-        city,
-        pincode,
-        roles: selectedRoles,
-        profileSetupComplete: true,
-        lastActive: new Date().toISOString(),
-        joinedAt: new Date().toISOString()
-      };
+      const targetStateCode = INDIAN_CITIES.find((c) => c.id === city)?.state || "India";
+      const primaryRole = selectedRoles[0] || "volunteer";
+      const isVeganPledged = selectedRoles.includes("vegan") && veganStatus !== "curious";
 
-      if (selectedRoles.includes("volunteer")) {
-        profilePayload.volunteerInfo = {
-          availableNow: volunteerAvailable,
-          skills: volunteerSkills,
-          radiusKm: volunteerRadius,
-          hoursPerWeek: volunteerHours,
-          currentLocation: {
-            latitude: 17.4485, // Hyderabad defaults for simulation
-            longitude: 78.3741,
-            geohash: "tgf7hg"
-          }
-        };
-      }
+      // Update user details in Supabase profiles
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          full_name: displayName,
+          city_name: city,
+          state_name: targetStateCode,
+          pincode: pincode,
+          roles: selectedRoles,
+          primary_role: primaryRole,
+          available_now: selectedRoles.includes("volunteer") ? volunteerAvailable : false,
+          rescue_radius_km: volunteerRadius,
+          skills: selectedRoles.includes("volunteer") ? volunteerSkills : [],
+          vegan_streak_days: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
 
-      if (selectedRoles.includes("rescuer")) {
-        profilePayload.rescuerInfo = {
-          experienceLevel: rescuerExp,
-          area: rescuerArea,
-          verified: true
-        };
-      }
-
-      if (selectedRoles.includes("adopter")) {
-        profilePayload.adopterInfo = {
-          housingType: adopterHousing,
-          hasOtherPets: adopterOtherPets,
-          preferredAnimal: adopterPreferred
-        };
-      }
-
-      if (selectedRoles.includes("vegan")) {
-        profilePayload.veganInfo = {
-          status: veganStatus,
-          interests: veganInterests,
-          pledgeDate: veganStatus !== "curious" ? new Date().toISOString() : null,
-          challengeDay: 1
-        };
-      }
-
-      if (selectedRoles.includes("ngo")) {
-        profilePayload.ngoInfo = {
-          orgName: ngoName,
-          emergencyContact: ngoEmergencyContact,
-          causeType: ngoCause,
-          verified: false // Awaits admin validation
-        };
-      }
-
-      if (selectedRoles.includes("feeder")) {
-        profilePayload.feederInfo = {
-          feedLocation: feederLocation,
-          routineTiming: feederTiming
-        };
-      }
-
-      await setDoc(userRef, profilePayload, { merge: true });
-
-      // Create and save public profile (PII-free)
-      const publicProfilePayload: any = {
-        uid: user.uid,
-        displayName,
-        city,
-        roles: selectedRoles,
-      };
-
-      if (selectedRoles.includes("volunteer")) {
-        publicProfilePayload.volunteerInfo = profilePayload.volunteerInfo;
-      }
-      if (selectedRoles.includes("rescuer")) {
-        publicProfilePayload.rescuerInfo = profilePayload.rescuerInfo;
-      }
-      if (selectedRoles.includes("ngo")) {
-        publicProfilePayload.ngoInfo = profilePayload.ngoInfo;
-      }
-      if (selectedRoles.includes("feeder")) {
-        publicProfilePayload.feederInfo = profilePayload.feederInfo;
-      }
-
-      await setDoc(doc(db, "public_profiles", user.uid), publicProfilePayload, { merge: true });
-
-      // If vegan pledge was taken, register a document in vegan_pledges
-      if (selectedRoles.includes("vegan") && veganStatus !== "curious") {
-        const pledgeRef = doc(db, "vegan_pledges", `${user.uid}_pledge`);
-        await setDoc(pledgeRef, {
-          pledgeId: `${user.uid}_pledge`,
-          uid: user.uid,
-          city,
-          createdAt: new Date().toISOString()
-        });
-      }
+      if (profileError) throw profileError;
 
       toast.success("Profile setup completed successfully!");
+      await refetchProfile();
       router.push("/dashboard");
 
     } catch (error: any) {
@@ -295,7 +218,6 @@ export default function OnboardingPage() {
         <EcoVerseLogo theme="dark" size={42} />
       </div>
 
-      {/* Main card */}
       <div
         style={{
           width: "100%",
@@ -304,7 +226,7 @@ export default function OnboardingPage() {
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
           border: "1px solid rgba(102, 187, 106, 0.15)",
-          borderRadius: "var(--radius-2xl)",
+          borderRadius: "16px",
           padding: "36px",
           boxShadow: "0 20px 40px rgba(0,0,0,0.45)"
         }}
@@ -333,10 +255,10 @@ export default function OnboardingPage() {
               {i < 5 && (
                 <div
                   style={{
-                    flex: 1,
-                    height: "2px",
-                    background: step > i ? "#388E3C" : "rgba(232,245,233,0.08)",
-                    margin: "0 8px"
+                     flex: 1,
+                     height: "2px",
+                     background: step > i ? "#388E3C" : "rgba(232,245,233,0.08)",
+                     margin: "0 8px"
                   }}
                 />
               )}
@@ -349,7 +271,7 @@ export default function OnboardingPage() {
           <div>
             <h2 style={{ fontSize: "1.5rem", fontWeight: 800, marginBottom: "8px" }}>Select Your Community Roles</h2>
             <p style={{ color: "rgba(232,245,233,0.6)", fontSize: "0.875rem", marginBottom: "24px" }}>
-              Choose 1 to 3 roles to personalize your dashboard and receive relevant dispatches.
+              Choose 1 to 3 roles to personalize your dashboard and receive dispatches.
             </p>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }} className="roles-grid">
@@ -362,13 +284,12 @@ export default function OnboardingPage() {
                     style={{
                       background: active ? "rgba(102, 187, 106, 0.08)" : "rgba(10, 16, 11, 0.4)",
                       border: active ? "2px solid #66BB6A" : "1px solid rgba(102,187,106,0.15)",
-                      borderRadius: "var(--radius-xl)",
+                      borderRadius: "12px",
                       padding: "16px",
                       cursor: "pointer",
                       display: "flex",
                       flexDirection: "column",
                       gap: "10px",
-                      transition: "all var(--transition-base)"
                     }}
                     className="role-card"
                   >
@@ -408,7 +329,7 @@ export default function OnboardingPage() {
                     width: "100%",
                     background: "rgba(10, 16, 11, 0.6)",
                     border: "1px solid rgba(102, 187, 106, 0.25)",
-                    borderRadius: "var(--radius-lg)",
+                    borderRadius: "8px",
                     padding: "12px 14px",
                     color: "#FFFFFF",
                     fontSize: "0.95rem"
@@ -419,7 +340,7 @@ export default function OnboardingPage() {
 
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(232, 245, 233, 0.85)" }}>
-                  Select City (48 Active Pilot Cities)
+                  Select City
                 </label>
                 <select
                   value={city}
@@ -428,7 +349,7 @@ export default function OnboardingPage() {
                     width: "100%",
                     background: "rgba(10, 16, 11, 0.8)",
                     border: "1px solid rgba(102, 187, 106, 0.25)",
-                    borderRadius: "var(--radius-lg)",
+                    borderRadius: "8px",
                     padding: "12px 14px",
                     color: "#FFFFFF",
                     fontSize: "0.95rem"
@@ -457,7 +378,7 @@ export default function OnboardingPage() {
                     width: "100%",
                     background: "rgba(10, 16, 11, 0.6)",
                     border: "1px solid rgba(102, 187, 106, 0.25)",
-                    borderRadius: "var(--radius-lg)",
+                    borderRadius: "8px",
                     padding: "12px 14px",
                     color: "#FFFFFF",
                     fontSize: "0.95rem"
@@ -478,47 +399,42 @@ export default function OnboardingPage() {
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-              {/* Volunteer Details */}
               {selectedRoles.includes("volunteer") && (
                 <div style={{ borderBottom: "1px solid rgba(102,187,106,0.15)", paddingBottom: "24px" }}>
                   <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#66BB6A", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
                     <Users size={18} /> Volunteer Profile
                   </h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                    <div>
-                      <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(232, 245, 233, 0.85)", display: "block", marginBottom: "8px" }}>
-                        Volunteer Skills (Select all that apply)
-                      </label>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-                        {["first_aid", "transport", "foster_care", "social_media", "admin_coordination"].map((skill) => {
-                          const active = volunteerSkills.includes(skill);
-                          return (
-                            <button
-                              key={skill}
-                              type="button"
-                              onClick={() => handleSkillToggle(skill)}
-                              style={{
-                                background: active ? "#388E3C" : "rgba(10, 16, 11, 0.6)",
-                                border: "1px solid rgba(102,187,106,0.25)",
-                                borderRadius: "var(--radius-full)",
-                                padding: "6px 14px",
-                                color: "#FFFFFF",
-                                fontSize: "0.8rem",
-                                cursor: "pointer",
-                                transition: "all var(--transition-fast)"
-                              }}
-                            >
-                              {skill.replace("_", " ").toUpperCase()}
-                            </button>
-                          );
-                        })}
-                      </div>
+                  <div>
+                    <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(232, 245, 233, 0.85)", display: "block", marginBottom: "8px" }}>
+                      Volunteer Skills
+                    </label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                      {["first_aid", "transport", "foster_care", "social_media", "admin_coordination"].map((skill) => {
+                        const active = volunteerSkills.includes(skill);
+                        return (
+                          <button
+                            key={skill}
+                            type="button"
+                            onClick={() => handleSkillToggle(skill)}
+                            style={{
+                              background: active ? "#388E3C" : "rgba(10, 16, 11, 0.6)",
+                              border: "1px solid rgba(102,187,106,0.25)",
+                              borderRadius: "20px",
+                              padding: "6px 14px",
+                              color: "#FFFFFF",
+                              fontSize: "0.8rem",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {skill.replace("_", " ").toUpperCase()}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Rescuer Details */}
               {selectedRoles.includes("rescuer") && (
                 <div style={{ borderBottom: "1px solid rgba(102,187,106,0.15)", paddingBottom: "24px" }}>
                   <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#66BB6A", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -530,154 +446,54 @@ export default function OnboardingPage() {
                       <select
                         value={rescuerExp}
                         onChange={(e) => setRescuerExp(e.target.value)}
-                        style={{ background: "#0a100b", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
+                        style={{ background: "#0a100b", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "8px", padding: "10px", color: "#FFFFFF" }}
                       >
-                        <option value="beginner">Beginner (Under 1 year)</option>
-                        <option value="intermediate">Intermediate (1-3 years)</option>
-                        <option value="advanced">Advanced (3+ years)</option>
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
                       </select>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(232,245,233,0.8)" }}>Rescue Area / Neighborhood</label>
+                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(232,245,233,0.8)" }}>Rescue Area</label>
                       <input
                         type="text"
-                        placeholder="e.g. Gachibowli, Hyderabad"
+                        placeholder="e.g. Gachibowli"
                         value={rescuerArea}
                         onChange={(e) => setRescuerArea(e.target.value)}
-                        style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
+                        style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "8px", padding: "10px", color: "#FFFFFF" }}
                       />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* NGO Details */}
               {selectedRoles.includes("ngo") && (
                 <div style={{ borderBottom: "1px solid rgba(102,187,106,0.15)", paddingBottom: "24px" }}>
                   <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#66BB6A", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Building2 size={18} /> NGO / Org Details
+                    <Building2 size={18} /> NGO Profile
                   </h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                     <input
                       type="text"
-                      placeholder="NGO/Shelter Name"
+                      placeholder="NGO Name"
                       value={ngoName}
                       onChange={(e) => setNgoName(e.target.value)}
-                      style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
+                      style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102, 187, 106, 0.25)", borderRadius: "8px", padding: "10px", color: "#FFFFFF" }}
                     />
                     <input
                       type="text"
-                      placeholder="Emergency Contact Phone"
+                      placeholder="Emergency Phone"
                       value={ngoEmergencyContact}
                       onChange={(e) => setNgoEmergencyContact(e.target.value)}
-                      style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
+                      style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102, 187, 106, 0.25)", borderRadius: "8px", padding: "10px", color: "#FFFFFF" }}
                     />
                     <input
                       type="text"
-                      placeholder="Main Cause (e.g. Stray Medical Shelter)"
+                      placeholder="NGO Cause"
                       value={ngoCause}
                       onChange={(e) => setNgoCause(e.target.value)}
-                      style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
+                      style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102, 187, 106, 0.25)", borderRadius: "8px", padding: "10px", color: "#FFFFFF" }}
                     />
-                  </div>
-                </div>
-              )}
-
-              {/* Adopter Details */}
-              {selectedRoles.includes("adopter") && (
-                <div style={{ borderBottom: "1px solid rgba(102,187,106,0.15)", paddingBottom: "24px" }}>
-                  <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#66BB6A", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Home size={18} /> Adoption Profile
-                  </h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(232,245,233,0.8)" }}>Housing Type</label>
-                      <select
-                        value={adopterHousing}
-                        onChange={(e) => setAdopterHousing(e.target.value)}
-                        style={{ background: "#0a100b", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
-                      >
-                        <option value="apartment">Apartment</option>
-                        <option value="independent_house">Independent House</option>
-                        <option value="farm">Farm / Open Area</option>
-                      </select>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(232,245,233,0.8)" }}>Preferred Animal</label>
-                      <select
-                        value={adopterPreferred}
-                        onChange={(e) => setAdopterPreferred(e.target.value)}
-                        style={{ background: "#0a100b", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
-                      >
-                        <option value="dog">Dogs</option>
-                        <option value="cat">Cats</option>
-                        <option value="other">Cows / Birds / Other</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Vegan Details */}
-              {selectedRoles.includes("vegan") && (
-                <div style={{ borderBottom: "1px solid rgba(102,187,106,0.15)", paddingBottom: "24px" }}>
-                  <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#66BB6A", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Leaf size={18} /> Vegan Movement
-                  </h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(232,245,233,0.8)" }}>Lifestyle Status</label>
-                      <select
-                        value={veganStatus}
-                        onChange={(e) => setVeganStatus(e.target.value)}
-                        style={{ background: "#0a100b", border: "1px solid rgba(102,187,106,0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
-                      >
-                        <option value="vegan">I am Vegan</option>
-                        <option value="going_vegan">Going Vegan</option>
-                        <option value="curious">Vegan Curious</option>
-                      </select>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(232,245,233,0.8)" }}>Diet / Cause Interests</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. recipes, activism, volunteering"
-                        value={veganInterests}
-                        onChange={(e) => setVeganInterests(e.target.value)}
-                        style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102, 187, 106, 0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Feeder Details */}
-              {selectedRoles.includes("feeder") && (
-                <div style={{ paddingBottom: "10px" }}>
-                  <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#66BB6A", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Calendar size={18} /> Daily Feeder Settings
-                  </h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(232,245,233,0.8)" }}>Feeding Spot</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. sector 2 park street"
-                        value={feederLocation}
-                        onChange={(e) => setFeederLocation(e.target.value)}
-                        style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102, 187, 106, 0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
-                      />
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                      <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(232, 245, 233, 0.8)" }}>Time Scheduled</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 08:30 PM"
-                        value={feederTiming}
-                        onChange={(e) => setFeederTiming(e.target.value)}
-                        style={{ background: "rgba(10, 16, 11, 0.6)", border: "1px solid rgba(102, 187, 106, 0.25)", borderRadius: "var(--radius-lg)", padding: "10px", color: "#FFFFFF" }}
-                      />
-                    </div>
                   </div>
                 </div>
               )}
@@ -690,7 +506,7 @@ export default function OnboardingPage() {
           <div>
             <h2 style={{ fontSize: "1.5rem", fontWeight: 800, marginBottom: "8px" }}>Availability & Coverage</h2>
             <p style={{ color: "rgba(232,245,233,0.6)", fontSize: "0.875rem", marginBottom: "24px" }}>
-              Configure your volunteer response dispatch parameters.
+              Configure your volunteer response parameters.
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -699,7 +515,6 @@ export default function OnboardingPage() {
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>Response Radius ({volunteerRadius} km)</label>
-                      <span style={{ fontSize: "0.85rem", color: "#66BB6A", fontWeight: 600 }}>Local Zone</span>
                     </div>
                     <input
                       type="range"
@@ -707,14 +522,13 @@ export default function OnboardingPage() {
                       max="50"
                       value={volunteerRadius}
                       onChange={(e) => setVolunteerRadius(Number(e.target.value))}
-                      style={{ width: "100%", accentColor: "#66BB6A", height: "6px", borderRadius: "3px", outline: "none" }}
+                      style={{ width: "100%", accentColor: "#66BB6A" }}
                     />
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>Weekly Hours Committed ({volunteerHours} hours)</label>
-                      <span style={{ fontSize: "0.85rem", color: "#66BB6A", fontWeight: 600 }}>Flexible</span>
+                      <label style={{ fontSize: "0.85rem", fontWeight: 600 }}>Weekly Hours ({volunteerHours} hours)</label>
                     </div>
                     <input
                       type="range"
@@ -722,7 +536,7 @@ export default function OnboardingPage() {
                       max="40"
                       value={volunteerHours}
                       onChange={(e) => setVolunteerHours(Number(e.target.value))}
-                      style={{ width: "100%", accentColor: "#66BB6A", height: "6px", borderRadius: "3px", outline: "none" }}
+                      style={{ width: "100%", accentColor: "#66BB6A" }}
                     />
                   </div>
 
@@ -733,13 +547,12 @@ export default function OnboardingPage() {
                       alignItems: "center",
                       background: "rgba(10, 16, 11, 0.4)",
                       border: "1px solid rgba(102,187,106,0.15)",
-                      borderRadius: "var(--radius-xl)",
+                      borderRadius: "12px",
                       padding: "18px"
                     }}
                   >
                     <div>
-                      <h4 style={{ fontWeight: 700, fontSize: "0.95rem" }}>Available for SOS alerts now</h4>
-                      <p style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", marginTop: "4px" }}>Receive real-time push dispatches immediately</p>
+                      <h4 style={{ fontWeight: 700, fontSize: "0.95rem" }}>Available for SOS dispatches now</h4>
                     </div>
                     <input
                       type="checkbox"
@@ -753,7 +566,7 @@ export default function OnboardingPage() {
                 <div style={{ textAlign: "center", padding: "40px 0", color: "rgba(232,245,233,0.6)" }}>
                   <CheckSquare size={40} style={{ color: "#66BB6A", marginBottom: "12px" }} />
                   <p>You did not select the <strong>Volunteer</strong> role.</p>
-                  <p style={{ fontSize: "0.8rem", marginTop: "8px", color: "rgba(232,245,233,0.4)" }}>Please click next to verify your details.</p>
+                  <p style={{ fontSize: "0.8rem", marginTop: "8px" }}>Please click next to verify your details.</p>
                 </div>
               )}
             </div>
@@ -768,7 +581,7 @@ export default function OnboardingPage() {
               Verify details before saving your EcoVerse member record.
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px", background: "rgba(10, 16, 11, 0.4)", border: "1px solid rgba(102,187,106,0.15)", borderRadius: "var(--radius-xl)", padding: "20px", fontSize: "0.9rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px", background: "rgba(10, 16, 11, 0.4)", border: "1px solid rgba(102,187,106,0.15)", borderRadius: "12px", padding: "20px", fontSize: "0.9rem" }}>
               <div>
                 <strong style={{ color: "rgba(232,245,233,0.6)" }}>Display Name:</strong>
                 <span style={{ marginLeft: "8px", fontWeight: 600 }}>{displayName}</span>
@@ -781,7 +594,7 @@ export default function OnboardingPage() {
                 <strong style={{ color: "rgba(232, 245, 233, 0.6)" }}>Selected Roles:</strong>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
                   {selectedRoles.map(r => (
-                    <span key={r} style={{ background: "rgba(102, 187, 106, 0.15)", border: "1px solid rgba(102, 187, 106, 0.3)", color: "#A5D6A7", padding: "4px 10px", borderRadius: "var(--radius-full)", fontSize: "0.75rem", fontWeight: 600 }}>
+                    <span key={r} style={{ background: "rgba(102, 187, 106, 0.15)", border: "1px solid rgba(102, 187, 106, 0.3)", color: "#A5D6A7", padding: "4px 10px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: 600 }}>
                       {r.toUpperCase()}
                     </span>
                   ))}
@@ -796,8 +609,7 @@ export default function OnboardingPage() {
           {step > 1 ? (
             <button
               onClick={prevStep}
-              className="btn btn-ghost"
-              style={{ padding: "12px 24px", display: "flex", alignItems: "center", gap: "6px" }}
+              style={{ padding: "12px 24px", background: "transparent", color: "#FFFFFF", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
             >
               <ChevronLeft size={16} />
               Back
@@ -809,12 +621,11 @@ export default function OnboardingPage() {
           {step < 5 ? (
             <button
               onClick={nextStep}
-              className="btn"
               style={{
                 background: "linear-gradient(135deg,#388E3C,#1B5E20)",
                 color: "#FFFFFF",
                 padding: "12px 28px",
-                borderRadius: "var(--radius-lg)",
+                borderRadius: "8px",
                 border: "none",
                 fontWeight: 700,
                 cursor: "pointer",
@@ -830,19 +641,17 @@ export default function OnboardingPage() {
             <button
               onClick={handleSubmit}
               disabled={saving}
-              className="btn"
               style={{
                 background: "linear-gradient(135deg,#66BB6A,#388E3C)",
                 color: "#FFFFFF",
                 padding: "12px 32px",
-                borderRadius: "var(--radius-lg)",
+                borderRadius: "8px",
                 border: "none",
                 fontWeight: 700,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
-                boxShadow: "0 6px 16px rgba(102, 187, 106, 0.3)"
               }}
             >
               {saving ? <span className="spinner-small"></span> : "Complete Setup"}
@@ -855,7 +664,6 @@ export default function OnboardingPage() {
         .role-card:hover {
           border-color: #66BB6A !important;
           transform: translateY(-2px);
-          box-shadow: 0 8px 16px rgba(0,0,0,0.2);
         }
         .spinner-small {
           width: 16px;
@@ -866,6 +674,7 @@ export default function OnboardingPage() {
           animation: spin 0.8s linear infinite;
           display: inline-block;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );

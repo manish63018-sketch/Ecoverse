@@ -3,10 +3,9 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Zap, Shield, Users, Clock } from "lucide-react";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { useAuth } from "@/context/AuthContext";
-import { getApiUrl } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { cities, areas } from "@/lib/locations-data";
 
 // Haversine distance calculator
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -21,6 +20,34 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
       Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+function getCityCoords(cityName?: string): { lat: number; lng: number } {
+  if (!cityName) return { lat: 20.5937, lng: 78.9629 };
+  const normalized = cityName.toLowerCase().trim();
+  if (normalized.includes("hyderabad")) return { lat: 17.3850, lng: 78.4867 };
+  if (normalized.includes("mumbai")) return { lat: 19.0760, lng: 72.8777 };
+  if (normalized.includes("delhi")) return { lat: 28.7041, lng: 77.1025 };
+  if (normalized.includes("bengaluru") || normalized.includes("bangalore")) return { lat: 12.9716, lng: 77.5946 };
+  if (normalized.includes("chennai")) return { lat: 13.0827, lng: 80.2707 };
+  if (normalized.includes("kolkata")) return { lat: 22.5726, lng: 88.3639 };
+  return { lat: 20.5937, lng: 78.9629 };
+}
+
+function resolveMemberCoords(cityName?: string, areaName?: string): { lat: number; lng: number } {
+  if (areaName) {
+    const foundArea = areas.find(a => a.name.toLowerCase().trim() === areaName.toLowerCase().trim());
+    if (foundArea && foundArea.lat && foundArea.lng) {
+      return { lat: foundArea.lat, lng: foundArea.lng };
+    }
+  }
+  if (cityName) {
+    const foundCity = cities.find(c => c.name.toLowerCase().trim() === cityName.toLowerCase().trim() || c.slug === cityName.toLowerCase().trim());
+    if (foundCity && foundCity.lat && foundCity.lng) {
+      return { lat: foundCity.lat, lng: foundCity.lng };
+    }
+  }
+  return getCityCoords(cityName);
 }
 
 // Relative time formatter
@@ -113,16 +140,16 @@ function SOSCard({ card, position }: { card: any; position: any }) {
     if (card.type === "volunteer" && card.id) {
       const fetchProfile = async () => {
         try {
-          const docRef = doc(db, "users", card.id);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (data.displayName) {
-              setDisplayName(data.displayName);
-            }
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", card.id)
+            .single();
+          if (data && data.full_name) {
+            setDisplayName(data.full_name);
           }
         } catch (err) {
-          console.warn("Could not load name from Firestore, using default:", err);
+          console.warn("Could not load name from Supabase, using default:", err);
         }
       };
       fetchProfile();
@@ -443,40 +470,118 @@ function MapVisual({ stats, loading }: { stats: any; loading: boolean }) {
 }
 
 export function FeatureSpotlight() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchLandingStats = async () => {
       try {
-        let url = "/api/landing-stats";
-        if (user) {
-          try {
-            const locRes = await fetch(getApiUrl(`/api/users/location?firebase_uid=${user.uid}`));
-            if (locRes.ok) {
-              const locData = await locRes.json();
-              if (locData.profile?.city_id) {
-                url += `?city_id=${locData.profile.city_id}`;
-              } else if (locData.profile?.state_id) {
-                url += `?state_id=${locData.profile.state_id}`;
-              }
-            }
-          } catch (locErr) {
-            console.warn("Failed to fetch user location profile for spotlight:", locErr);
-          }
+        setLoading(true);
+        
+        let volsQuery = supabase
+          .from("profiles")
+          .select("id, full_name, city_name, area_name, verification_status, roles, available_now");
+        
+        let ngosQuery = supabase
+          .from("ngos")
+          .select("id, name, city_name, state_name");
+        
+        let rescuesQuery = supabase
+          .from("rescue_cases")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        // Apply filters based on logged-in user profile
+        if (profile?.city_name) {
+          volsQuery = volsQuery.eq("city_name", profile.city_name);
+          ngosQuery = ngosQuery.eq("city_name", profile.city_name);
+          rescuesQuery = rescuesQuery.eq("city_name", profile.city_name);
+        } else if (profile?.state_name) {
+          volsQuery = volsQuery.eq("state_name", profile.state_name);
+          ngosQuery = ngosQuery.eq("state_name", profile.state_name);
+          rescuesQuery = rescuesQuery.eq("state_name", profile.state_name);
         }
-        const res = await fetch(getApiUrl(url));
-        const data = await res.json();
-        setStats(data);
+
+        const [volsRes, ngosRes, rescuesRes] = await Promise.all([
+          volsQuery,
+          ngosQuery,
+          rescuesQuery
+        ]);
+
+        const allVols = volsRes.data || [];
+        const activeVols = allVols.filter((p: any) => p.roles?.includes("volunteer") && (p.available_now || p.verification_status === "verified"));
+        
+        const allNgos = ngosRes.data || [];
+        const allRescues = rescuesRes.data || [];
+        const resolvedRescuesList = allRescues.filter((r: any) => r.status === "resolved");
+
+        // 1. Build counts
+        const counts = {
+          states: 33, // Static count matching locations-data
+          cities: 48, // Static count matching locations-data
+          areas: profile?.city_name ? allVols.length + 3 : 230, // Estimate based on data
+          volunteers: activeVols.length,
+          ngos: allNgos.length,
+          rescues: allRescues.length,
+          resolvedRescues: resolvedRescuesList.length,
+        };
+
+        // 2. Build members list for map visual / spotlight
+        const resolvedMembers = [
+          ...activeVols.slice(0, 5).map((m: any) => {
+            const coords = resolveMemberCoords(m.city_name, m.area_name);
+            return {
+              id: m.id,
+              type: "volunteer",
+              name: m.full_name || "Volunteer",
+              lat: coords.lat,
+              lng: coords.lng,
+            };
+          }),
+          ...allNgos.slice(0, 5).map((n: any) => {
+            const coords = n.lat && n.lng
+              ? { lat: Number(n.lat), lng: Number(n.lng) }
+              : resolveMemberCoords(n.city_name);
+            return {
+              id: n.id,
+              type: "ngo",
+              name: n.name,
+              lat: coords.lat,
+              lng: coords.lng,
+            };
+          })
+        ];
+
+        // 3. Build sample areas
+        const sampleAreas = profile?.city_name
+          ? areas.filter(a => {
+              const cityObj = cities.find(c => c.id === a.city_id);
+              return cityObj && cityObj.name.toLowerCase().trim() === profile.city_name?.toLowerCase().trim();
+            }).slice(0, 5).map(a => a.name)
+          : ["Banjara Hills", "Jubilee Hills", "Secunderabad", "Whitefield", "Koramangala"];
+
+        setStats({
+          counts,
+          members: resolvedMembers,
+          recentCases: allRescues.slice(0, 5).map((r: any) => ({
+            id: r.id,
+            animal_type: r.animal_type,
+            condition_summary: r.condition_summary,
+            status: r.status,
+            created_at: r.created_at,
+            area_name: r.area_name,
+          })),
+          sampleAreas,
+        });
       } catch (err) {
-        console.error("Failed to fetch landing stats:", err);
+        console.error("Failed to construct landing stats client-side:", err);
       } finally {
         setLoading(false);
       }
     };
     fetchLandingStats();
-  }, [user]);
+  }, [user, profile]);
 
   const features = getFeatures(stats, loading);
 

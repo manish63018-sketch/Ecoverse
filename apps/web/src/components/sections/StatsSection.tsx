@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 
 interface LiveStats {
   animalsHelped: number;
@@ -117,81 +116,44 @@ export function StatsSection() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    // 1. Real-time total members
-    const unsubscribeMembers = onSnapshot(
-      collection(db, "public_profiles"),
-      (snap) => {
-        setStats((prev) => ({
-          ...prev,
-          totalMembers: snap.size,
-        }));
+    const fetchStats = async () => {
+      try {
+        const [membersRes, volunteersRes, ngosRes, rescuesRes] = await Promise.all([
+          supabase.from("profiles").select("id", { count: "exact", head: true }),
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["volunteer"]),
+          supabase.from("profiles").select("id", { count: "exact", head: true }).contains("roles", ["ngo"]),
+          supabase.from("rescue_cases").select("id", { count: "exact", head: true }).eq("status", "resolved"),
+        ]);
+
+        setStats({
+          animalsHelped: rescuesRes.count || 0,
+          activeVolunteers: volunteersRes.count || 0,
+          citiesCovered: 1,
+          ngoPartners: ngosRes.count || 0,
+          rescueCasesResolved: rescuesRes.count || 0,
+          totalMembers: membersRes.count || 0,
+        });
         setLoaded(true);
-      },
-      (err) => {
-        console.error("Error listening to public_profiles count:", err);
+      } catch (err) {
+        console.error("Error loading stats:", err);
       }
-    );
+    };
 
-    // 2. Real-time active volunteers
-    const qVolunteers = query(
-      collection(db, "public_profiles"),
-      where("roles", "array-contains", "volunteer")
-    );
-    const unsubscribeVolunteers = onSnapshot(
-      qVolunteers,
-      (snap) => {
-        setStats((prev) => ({
-          ...prev,
-          activeVolunteers: snap.size,
-        }));
-      },
-      (err) => {
-        console.error("Error listening to active volunteers count:", err);
-      }
-    );
+    fetchStats();
 
-    // 3. Real-time NGO partners
-    const qNgos = query(
-      collection(db, "public_profiles"),
-      where("roles", "array-contains", "ngo")
-    );
-    const unsubscribeNgos = onSnapshot(
-      qNgos,
-      (snap) => {
-        setStats((prev) => ({
-          ...prev,
-          ngoPartners: snap.size,
-        }));
-      },
-      (err) => {
-        console.error("Error listening to NGO partners count:", err);
-      }
-    );
-
-    // 4. Real-time rescues resolved
-    const qRescues = query(
-      collection(db, "rescues"),
-      where("status", "==", "resolved")
-    );
-    const unsubscribeRescues = onSnapshot(
-      qRescues,
-      (snap) => {
-        setStats((prev) => ({
-          ...prev,
-          animalsHelped: snap.size,
-          rescueCasesResolved: snap.size,
-        }));
-      },
-      (err) => {
-        console.error("Error listening to resolved rescues count:", err);
-      }
-    );
+    // Set up realtime subscription to profiles and rescue cases
+    const channel = supabase
+      .channel("stats-db-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
+        fetchStats();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "rescue_cases" }, () => {
+        fetchStats();
+      })
+      .subscribe();
 
     return () => {
-      unsubscribeMembers();
-      unsubscribeVolunteers();
-      unsubscribeNgos();
-      unsubscribeRescues();
+      supabase.removeChannel(channel);
     };
   }, []);
 

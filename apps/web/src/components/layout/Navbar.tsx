@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, Bell, LogOut, LayoutDashboard, User as UserIcon, Settings } from "lucide-react";
 import { EcoVerseLogo } from "@/components/brand/Logo";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
 import toast from "react-hot-toast";
 
 const navLinks = [
@@ -21,7 +21,7 @@ const navLinks = [
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function Navbar() {
 
   const handleLogout = async () => {
     try {
-      await logout();
+      await signOut();
       toast.success("Successfully logged out");
     } catch (err) {
       toast.error("Logout failed");

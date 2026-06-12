@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { ECOVERSE_ROLES } from "@/lib/roles";
 import { supabase } from "@/lib/supabase";
 import { Check, ShieldAlert, Award, Star, Compass, UserCheck } from "lucide-react";

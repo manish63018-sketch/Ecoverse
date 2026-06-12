@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { MapPin, ChevronDown, CheckCircle, Loader } from "lucide-react";
 import type { State, City, Area, LocationSelection } from "@/types/location";
-import { getApiUrl } from "@/lib/api";
+import { getStatesClient, getCitiesByStateClient, getAreasByCityClient } from "@/lib/locations-data";
 
 interface LocationPickerProps {
   onChange: (selection: LocationSelection | null) => void;
@@ -51,9 +51,8 @@ export default function LocationPicker({
     const loadStates = async () => {
       setLoading((prev) => ({ ...prev, states: true }));
       try {
-        const res = await fetch(getApiUrl("/api/locations/states"));
-        const data = await res.json();
-        setStates(data.states ?? []);
+        const data = getStatesClient();
+        setStates(data ?? []);
       } catch {
         setError("Failed to load states. Please refresh.");
       } finally {
@@ -80,9 +79,8 @@ export default function LocationPicker({
       setSelectedCityId("");
       setSelectedAreaId("");
       try {
-        const res = await fetch(getApiUrl(`/api/locations/cities?state_id=${selectedStateId}`));
-        const data = await res.json();
-        setCities(data.cities ?? []);
+        const data = getCitiesByStateClient(selectedStateId);
+        setCities(data ?? []);
       } catch {
         setError("Failed to load cities.");
       } finally {
@@ -105,9 +103,8 @@ export default function LocationPicker({
       setAreas([]);
       setSelectedAreaId("");
       try {
-        const res = await fetch(getApiUrl(`/api/locations/areas?city_id=${selectedCityId}`));
-        const data = await res.json();
-        setAreas(data.areas ?? []);
+        const data = getAreasByCityClient(selectedCityId);
+        setAreas(data ?? []);
       } catch {
         setError("Failed to load areas.");
       } finally {

@@ -1,14 +1,15 @@
 "use client";
 
+/**
+ * "Supabase is the only source of truth for authentication and app data."
+ */
+
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { useProfile } from "@/lib/hooks/useProfile";
 import { useRouter } from "next/navigation";
-import {
-  doc, getDoc, collection, query, where,
-  getDocs, limit, updateDoc,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import {
   MapPin, Shield, Activity, Settings, ArrowLeft,
   ToggleLeft, ToggleRight, CheckCircle, Navigation,
@@ -16,14 +17,13 @@ import {
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
 import type { LocationSelection } from "@/types/location";
-import { getApiUrl } from "@/lib/api";
+import type { Profile, RescueCase } from "@/lib/types";
 
 const LocationPicker = dynamic(
   () => import("@/components/sections/LocationPicker"),
   { ssr: false }
 );
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface UserProfile {
   displayName: string;
   email: string;
@@ -51,7 +51,6 @@ interface RecentCase {
   createdAt: string;
 }
 
-// ─── Badge definitions ────────────────────────────────────────────────────────
 const ALL_BADGES = [
   {
     id: "animal_rescuer",
@@ -75,7 +74,7 @@ const ALL_BADGES = [
     title: "Vegan Warrior",
     desc: "Joined as a vegan / animal lover",
     color: "#26A69A",
-    earnCondition: (p: UserProfile) => p.roles?.includes("vegan"),
+    earnCondition: (p: UserProfile) => p.roles?.includes("vegan_advocate") || p.roles?.includes("vegan"),
   },
   {
     id: "active_volunteer",
@@ -99,136 +98,136 @@ const ALL_BADGES = [
     title: "NGO Partner",
     desc: "Joined as an NGO / Organization",
     color: "#AB47BC",
-    earnCondition: (p: UserProfile) => p.roles?.includes("ngo"),
+    earnCondition: (p: UserProfile) => p.roles?.includes("ngo_staff") || p.roles?.includes("ngo"),
   },
 ];
 
-// ─── Role definitions ─────────────────────────────────────────────────────────
 const ROLE_MAP: Record<string, { emoji: string; label: string; color: string }> = {
   rescuer:   { emoji: "🐾", label: "Rescuer",            color: "#66BB6A" },
   adopter:   { emoji: "🏡", label: "Adopter",            color: "#FFA726" },
+  vegan_advocate: { emoji: "🌱", label: "Vegan / Animal Lover", color: "#26A69A" },
   vegan:     { emoji: "🌱", label: "Vegan / Animal Lover", color: "#26A69A" },
   volunteer: { emoji: "🤝", label: "Volunteer",          color: "#42A5F5" },
-  ngo:       { emoji: "🏢", label: "NGO / Organization", color: "#AB47BC" },
+  ngo_staff: { emoji: "🏢", label: "NGO Staff",          color: "#AB47BC" },
+  ngo:       { emoji: "🏢", label: "NGO Staff",          color: "#AB47BC" },
   feeder:    { emoji: "🐦", label: "Feeder / Caretaker", color: "#FF7043" },
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const { data: rawProfile, loading: profileLoading, refetch } = useProfile(user?.id);
   const [recentCases, setRecentCases] = useState<RecentCase[]>([]);
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [recentLoading, setRecentLoading] = useState(true);
   const [togglingAvail, setTogglingAvail] = useState(false);
 
-  // 3-level location state
   const [locationSelection, setLocationSelection] = useState<LocationSelection | null>(null);
-  const [currentLocation, setCurrentLocation] = useState<{ display_zone?: string; area_name?: string } | null>(null);
   const [savingLocation, setSavingLocation] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push("/login");
+      router.push("/auth/login");
     }
   }, [user, loading, router]);
+
+  const profile: UserProfile | null = rawProfile ? {
+    displayName: rawProfile.full_name || "EcoVerse Supporter",
+    email: rawProfile.email || user?.email || "",
+    city: rawProfile.city_name || "",
+    roles: rawProfile.roles || [],
+    profileSetupComplete: !!rawProfile.full_name,
+    rescueCasesReported: rawProfile.rescue_count || 0,
+    rescuesHelped: rawProfile.volunteer_hours || 0,
+    animalsAdopted: rawProfile.adopt_count || 0,
+    points: (rawProfile.rescue_count || 0) * 10 + (rawProfile.adopt_count || 0) * 15,
+    createdAt: rawProfile.created_at,
+    bio: rawProfile.bio || "",
+    availableNow: rawProfile.available_now || false,
+    rescueRadiusKm: rawProfile.rescue_radius_km || 10,
+    skills: rawProfile.skills || [],
+    instagramHandle: rawProfile.instagram_handle || "",
+  } : null;
+
+  const currentLocation = rawProfile?.area_name ? {
+    display_zone: `${rawProfile.area_name}, ${rawProfile.city_name || ""}`,
+    area_name: rawProfile.area_name
+  } : null;
 
   useEffect(() => {
     if (!user) return;
 
-    const fetchAll = async () => {
+    const fetchRecentCases = async () => {
       try {
-        // Load own profile
-        const docRef = doc(db, "users", user.uid);
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          setProfile(snap.data() as UserProfile);
-        }
+        const { data, error } = await supabase
+          .from("rescue_cases")
+          .select("*")
+          .eq("reporter_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(5);
 
-        // Load recent rescue cases by this user
-        try {
-          const q = query(
-            collection(db, "rescues"),
-            where("reporterId", "==", user.uid),
-            limit(5)
-          );
-          const snapCases = await getDocs(q);
-          const cases: RecentCase[] = [];
-          snapCases.forEach((d) =>
-            cases.push({ caseId: d.id, ...d.data() } as RecentCase)
-          );
-          setRecentCases(cases);
-        } catch {
-          // index may not exist yet — silently skip
-        }
+        if (error) throw error;
 
-        // Load existing location profile from PostgreSQL
-        try {
-          const res = await fetch(getApiUrl(`/api/users/location?firebase_uid=${user.uid}`));
-          if (res.ok) {
-            const data = await res.json();
-            const locProfile = data.profile;
-            if (locProfile?.area_id) {
-              setCurrentLocation({
-                display_zone: locProfile.display_zone,
-                area_name: locProfile.area_name,
-              });
-            }
-          }
-        } catch {
-          // DB may not be configured — silently skip
-        }
+        const mapped: RecentCase[] = (data || []).map((c: any) => ({
+          caseId: c.id,
+          animalType: c.animal_type,
+          status: c.status,
+          severity: c.emergency_level,
+          location: { addressText: c.area_name ? `${c.area_name}, ${c.city_name}` : c.city_name },
+          createdAt: c.created_at
+        }));
+
+        setRecentCases(mapped);
       } catch (err) {
-        console.error("Profile fetch error:", err);
+        console.error("Failed to load user rescue cases:", err);
       } finally {
-        setProfileLoading(false);
+        setRecentLoading(false);
       }
     };
 
-    fetchAll();
+    fetchRecentCases();
   }, [user]);
 
   const handleSaveLocation = useCallback(async () => {
     if (!user || !locationSelection) return;
     setSavingLocation(true);
     try {
-      const res = await fetch(getApiUrl("/api/users/location"), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firebase_uid: user.uid,
-          state_id: locationSelection.stateId,
-          city_id: locationSelection.cityId,
-          area_id: locationSelection.areaId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save location");
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          state_name: locationSelection.stateName || locationSelection.stateId,
+          city_name: locationSelection.cityName || locationSelection.cityId,
+          area_name: locationSelection.areaName || locationSelection.areaId,
+        })
+        .eq("id", user.id);
 
-      setCurrentLocation({ display_zone: locationSelection.displayZone, area_name: locationSelection.areaName });
+      if (error) throw error;
+
       setShowLocationPicker(false);
       setLocationSelection(null);
-      toast.success(`📍 Location set to ${locationSelection.areaName}! You'll now receive area-specific rescue alerts.`);
+      refetch();
+      toast.success(`📍 Location set to ${locationSelection.areaName}!`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to save location");
     } finally {
       setSavingLocation(false);
     }
-  }, [user, locationSelection]);
+  }, [user, locationSelection, refetch]);
 
   const toggleAvailability = async () => {
-    if (!user || !profile) return;
+    if (!user || !rawProfile) return;
     setTogglingAvail(true);
     try {
-      const newVal = !profile.availableNow;
-      await updateDoc(doc(db, "users", user.uid), { availableNow: newVal });
-      // Also update public profile for map
-      await updateDoc(doc(db, "public_profiles", user.uid), {
-        "volunteerInfo.availableNow": newVal,
-      }).catch(() => {}); // silently skip if public profile doesn't have this
-      setProfile((prev) => prev ? { ...prev, availableNow: newVal } : prev);
+      const newVal = !rawProfile.available_now;
+      const { error } = await supabase
+        .from("profiles")
+        .update({ available_now: newVal })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      refetch();
       toast.success(newVal ? "You're now showing as available 🟢" : "Availability set to offline");
     } catch (err) {
       toast.error("Failed to update availability");
@@ -250,6 +249,8 @@ export default function ProfilePage() {
   const isVolunteer = profile.roles?.includes("volunteer");
   const isAvailable = profile.availableNow ?? false;
 
+  const userAvatar = rawProfile?.avatar_url || user?.user_metadata?.avatar_url || null;
+
   return (
     <div
       style={{
@@ -260,7 +261,6 @@ export default function ProfilePage() {
         paddingBottom: "80px",
       }}
     >
-      {/* ── Cover Strip ─────────────────────────────────────────────────── */}
       <div
         style={{
           height: "180px",
@@ -273,7 +273,6 @@ export default function ProfilePage() {
           overflow: "hidden",
         }}
       >
-        {/* Pixel dot background on cover */}
         <div
           style={{
             position: "absolute",
@@ -283,7 +282,6 @@ export default function ProfilePage() {
             opacity: 0.12,
           }}
         />
-        {/* Back + settings */}
         <div
           style={{
             position: "absolute",
@@ -321,7 +319,7 @@ export default function ProfilePage() {
               background: "rgba(102,187,106,0.1)",
               border: "1px solid rgba(102,187,106,0.2)",
               padding: "6px 14px",
-              borderRadius: "var(--radius-full)",
+              borderRadius: "100px",
             }}
           >
             <Settings size={14} /> Edit Profile
@@ -333,7 +331,6 @@ export default function ProfilePage() {
         className="container"
         style={{ maxWidth: "900px", margin: "0 auto", padding: "0 24px" }}
       >
-        {/* ── Avatar + Name Row ──────────────────────────────────────────── */}
         <div
           style={{
             display: "flex",
@@ -346,11 +343,10 @@ export default function ProfilePage() {
             zIndex: 5,
           }}
         >
-          {/* Avatar */}
           <div style={{ position: "relative" }}>
-            {user.photoURL ? (
+            {userAvatar ? (
               <img
-                src={user.photoURL}
+                src={userAvatar}
                 alt={profile.displayName}
                 style={{
                   width: "96px",
@@ -381,7 +377,6 @@ export default function ProfilePage() {
                 {profile.displayName?.charAt(0).toUpperCase() || "U"}
               </div>
             )}
-            {/* Online indicator if volunteer and available */}
             {isVolunteer && isAvailable && (
               <span
                 style={{
@@ -415,7 +410,7 @@ export default function ProfilePage() {
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   padding: "3px 10px",
-                  borderRadius: "var(--radius-full)",
+                  borderRadius: "20px",
                 }}
               >
                 EcoVerse Member
@@ -432,7 +427,7 @@ export default function ProfilePage() {
                     background: isAvailable ? "rgba(102,187,106,0.15)" : "rgba(255,255,255,0.06)",
                     border: `1px solid ${isAvailable ? "rgba(102,187,106,0.4)" : "rgba(255,255,255,0.1)"}`,
                     color: isAvailable ? "#66BB6A" : "rgba(232,245,233,0.4)",
-                    borderRadius: "var(--radius-full)",
+                    borderRadius: "20px",
                     padding: "4px 12px",
                     fontSize: "0.75rem",
                     fontWeight: 700,
@@ -470,7 +465,6 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ── Stats Row ─────────────────────────────────────────────────── */}
         <div
           style={{
             display: "grid",
@@ -490,7 +484,7 @@ export default function ProfilePage() {
               style={{
                 background: "rgba(21,35,23,0.5)",
                 border: "1px solid rgba(102,187,106,0.12)",
-                borderRadius: "var(--radius-xl)",
+                borderRadius: "16px",
                 padding: "18px",
                 textAlign: "center",
                 transition: "all 0.2s",
@@ -506,13 +500,9 @@ export default function ProfilePage() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "24px" }} className="profile-grid">
-          {/* ── Left column ───────────────────────────────────────────── */}
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-
-            {/* ── Location Zone (3-Level) Card ─────────────────────────── */}
             <Card title="📍 My Alert Zone">
               <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {/* Current location display */}
                 <div style={{
                   padding: "14px 16px",
                   background: currentLocation?.display_zone
@@ -530,7 +520,7 @@ export default function ProfilePage() {
                           {currentLocation.display_zone}
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.5)", marginTop: "3px" }}>
-                          ✅ Rescue alerts are isolated to <strong style={{ color: "rgba(232,245,233,0.7)" }}>{currentLocation.area_name}</strong> only
+                          ✅ Rescue alerts are isolated to <strong>{currentLocation.area_name}</strong>
                         </div>
                       </div>
                     </>
@@ -547,7 +537,6 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                {/* Toggle picker */}
                 {!showLocationPicker ? (
                   <button
                     onClick={() => setShowLocationPicker(true)}
@@ -557,7 +546,6 @@ export default function ProfilePage() {
                       color: "#A5D6A7", padding: "9px 18px",
                       borderRadius: "9px", fontWeight: 600,
                       cursor: "pointer", fontSize: "0.85rem",
-                      fontFamily: "var(--font-sans)", transition: "all 0.15s",
                       display: "flex", alignItems: "center", gap: "6px", width: "fit-content",
                     }}
                   >
@@ -579,12 +567,11 @@ export default function ProfilePage() {
                           border: "none", color: "#FFFFFF",
                           padding: "10px 20px", borderRadius: "9px",
                           fontWeight: 700, cursor: locationSelection ? "pointer" : "not-allowed",
-                          fontSize: "0.85rem", fontFamily: "var(--font-sans)",
-                          transition: "all 0.15s",
+                          fontSize: "0.85rem",
                           display: "flex", alignItems: "center", gap: "6px",
                         }}
                       >
-                        {savingLocation ? "Saving..." : "✅ Save Location"}
+                        {savingLocation ? "Saving..." : "Save Location"}
                       </button>
                       <button
                         onClick={() => { setShowLocationPicker(false); setLocationSelection(null); }}
@@ -594,7 +581,6 @@ export default function ProfilePage() {
                           color: "rgba(232,245,233,0.5)", padding: "10px 16px",
                           borderRadius: "9px", fontWeight: 600,
                           cursor: "pointer", fontSize: "0.85rem",
-                          fontFamily: "var(--font-sans)",
                         }}
                       >
                         Cancel
@@ -602,15 +588,9 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 )}
-
-                <div style={{ fontSize: "0.72rem", color: "rgba(232,245,233,0.35)", display: "flex", alignItems: "center", gap: "5px" }}>
-                  <Shield size={11} />
-                  Your location is used only for rescue alert routing — never shared publicly
-                </div>
               </div>
             </Card>
 
-            {/* Roles */}
             <Card title="My Roles">
               <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
                 {(profile.roles || []).map((role) => {
@@ -624,7 +604,7 @@ export default function ProfilePage() {
                         gap: "8px",
                         background: `${info.color}18`,
                         border: `1px solid ${info.color}40`,
-                        borderRadius: "var(--radius-full)",
+                        borderRadius: "20px",
                         padding: "8px 16px",
                         fontSize: "0.875rem",
                         fontWeight: 600,
@@ -636,15 +616,9 @@ export default function ProfilePage() {
                     </div>
                   );
                 })}
-                {(!profile.roles || profile.roles.length === 0) && (
-                  <p style={{ color: "rgba(232,245,233,0.4)", fontSize: "0.875rem" }}>
-                    No roles selected. <Link href="/settings" style={{ color: "#66BB6A" }}>Add roles →</Link>
-                  </p>
-                )}
               </div>
             </Card>
 
-            {/* Volunteer availability panel */}
             {isVolunteer && (
               <Card title="Volunteer Availability">
                 <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -662,75 +636,21 @@ export default function ProfilePage() {
                         background: isAvailable ? "#2E7D32" : "rgba(255,255,255,0.06)",
                         border: `1px solid ${isAvailable ? "#388E3C" : "rgba(255,255,255,0.1)"}`,
                         color: "#FFFFFF",
-                        borderRadius: "var(--radius-full)",
+                        borderRadius: "20px",
                         padding: "6px 16px",
                         fontSize: "0.8rem",
                         fontWeight: 700,
                         cursor: "pointer",
-                        fontFamily: "var(--font-sans)",
-                        transition: "all 0.2s",
                       }}
                     >
                       {isAvailable ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                      {isAvailable ? "ON — You appear on map" : "OFF — Hidden from map"}
+                      {isAvailable ? "ON — Live on map" : "OFF — Hidden"}
                     </button>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: "0.8rem", color: "rgba(232,245,233,0.5)" }}>Rescue Radius:</span>
-                    {[5, 10, 25].map((km) => (
-                      <span
-                        key={km}
-                        style={{
-                          padding: "4px 12px",
-                          borderRadius: "var(--radius-full)",
-                          fontSize: "0.8rem",
-                          fontWeight: 600,
-                          background: (profile.rescueRadiusKm ?? 10) === km ? "rgba(102,187,106,0.2)" : "transparent",
-                          border: `1px solid ${(profile.rescueRadiusKm ?? 10) === km ? "#66BB6A" : "rgba(102,187,106,0.15)"}`,
-                          color: (profile.rescueRadiusKm ?? 10) === km ? "#66BB6A" : "rgba(232,245,233,0.4)",
-                          cursor: "pointer",
-                        }}
-                      >
-                        {km} km
-                      </span>
-                    ))}
-                  </div>
-                  {profile.skills && profile.skills.length > 0 && (
-                    <div>
-                      <span style={{ fontSize: "0.75rem", color: "rgba(232,245,233,0.4)", display: "block", marginBottom: "6px" }}>
-                        Skills:
-                      </span>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                        {profile.skills.map((skill) => (
-                          <span
-                            key={skill}
-                            style={{
-                              background: "rgba(102,187,106,0.08)",
-                              border: "1px solid rgba(102,187,106,0.15)",
-                              color: "#A5D6A7",
-                              padding: "3px 10px",
-                              borderRadius: "var(--radius-full)",
-                              fontSize: "0.75rem",
-                              fontWeight: 600,
-                            }}
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <Link
-                    href="/settings"
-                    style={{ fontSize: "0.8rem", color: "#66BB6A", textDecoration: "none", fontWeight: 600 }}
-                  >
-                    Edit volunteer settings →
-                  </Link>
                 </div>
               </Card>
             )}
 
-            {/* Activity Feed */}
             <Card title={`Recent Activity (${recentCases.length} reports)`}>
               {recentCases.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "24px 0" }}>
@@ -738,19 +658,6 @@ export default function ProfilePage() {
                   <p style={{ color: "rgba(232,245,233,0.4)", fontSize: "0.875rem" }}>
                     No rescue cases reported yet.
                   </p>
-                  <Link
-                    href="/sos"
-                    style={{
-                      display: "inline-block",
-                      marginTop: "12px",
-                      color: "#EF5350",
-                      textDecoration: "none",
-                      fontWeight: 600,
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    🚨 Report your first SOS →
-                  </Link>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -760,7 +667,7 @@ export default function ProfilePage() {
                       style={{
                         background: "rgba(10,16,11,0.5)",
                         border: "1px solid rgba(102,187,106,0.1)",
-                        borderRadius: "var(--radius-lg)",
+                        borderRadius: "8px",
                         padding: "12px 14px",
                         display: "flex",
                         justifyContent: "space-between",
@@ -781,7 +688,7 @@ export default function ProfilePage() {
                           fontSize: "0.72rem",
                           fontWeight: 700,
                           padding: "3px 10px",
-                          borderRadius: "var(--radius-full)",
+                          borderRadius: "20px",
                           background: c.status === "resolved" ? "rgba(102,187,106,0.15)" : "rgba(239,83,80,0.15)",
                           color: c.status === "resolved" ? "#66BB6A" : "#EF5350",
                           border: `1px solid ${c.status === "resolved" ? "rgba(102,187,106,0.3)" : "rgba(239,83,80,0.3)"}`,
@@ -798,10 +705,8 @@ export default function ProfilePage() {
             </Card>
           </div>
 
-          {/* ── Right column (badges) ─────────────────────────────────── */}
           <div>
             <Card title="Badges &amp; Achievements">
-              {/* Earned */}
               {earnedBadges.length > 0 && (
                 <div style={{ marginBottom: "20px" }}>
                   <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#66BB6A", marginBottom: "12px" }}>
@@ -814,7 +719,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
               )}
-              {/* Locked */}
               {lockedBadges.length > 0 && (
                 <div>
                   <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(232,245,233,0.3)", marginBottom: "12px" }}>
@@ -827,14 +731,10 @@ export default function ProfilePage() {
                   </div>
                 </div>
               )}
-              {earnedBadges.length === 0 && lockedBadges.length === 0 && (
-                <p style={{ color: "rgba(232,245,233,0.4)", fontSize: "0.875rem" }}>No badges yet — start rescuing!</p>
-              )}
             </Card>
 
-            {/* Quick links */}
             <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <Link href="/sos" style={quickLinkStyle("#EF5350")}>🚨 Report an SOS Case →</Link>
+              <Link href="/rescue?sos=true" style={quickLinkStyle("#EF5350")}>🚨 Report an SOS Case →</Link>
               <Link href="/map" style={quickLinkStyle("#42A5F5")}>🗺️ View Live India Map →</Link>
               <Link href="/settings" style={quickLinkStyle("#66BB6A")}>⚙️ Edit Profile / Settings →</Link>
             </div>
@@ -855,7 +755,6 @@ export default function ProfilePage() {
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div
@@ -864,7 +763,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
         border: "1px solid rgba(102,187,106,0.12)",
-        borderRadius: "var(--radius-2xl)",
+        borderRadius: "16px",
         padding: "24px",
       }}
     >
@@ -896,7 +795,7 @@ function BadgeCard({
       style={{
         background: earned ? `${badge.color}14` : "rgba(255,255,255,0.03)",
         border: `1px solid ${earned ? badge.color + "40" : "rgba(255,255,255,0.06)"}`,
-        borderRadius: "var(--radius-xl)",
+        borderRadius: "12px",
         padding: "12px 8px",
         textAlign: "center",
         opacity: earned ? 1 : 0.45,
@@ -919,7 +818,7 @@ function quickLinkStyle(color: string): React.CSSProperties {
     display: "block",
     background: `${color}0f`,
     border: `1px solid ${color}30`,
-    borderRadius: "var(--radius-xl)",
+    borderRadius: "12px",
     padding: "14px 16px",
     color: color,
     textDecoration: "none",

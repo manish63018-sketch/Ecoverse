@@ -1,15 +1,22 @@
 "use client";
 
+/**
+ * "Supabase is the only source of truth for authentication and app data."
+ */
+
 import React, { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { useDashboardStats } from "@/lib/hooks/useDashboardStats";
+import { useNotifications } from "@/lib/hooks/useNotifications";
 import { 
   LogOut, MapPin, Shield, Activity, Plus, 
-  Bell, BookOpen, Clock, AlertCircle, Layers, CheckCircle 
+  Bell, BookOpen, Clock, AlertCircle, Layers, CheckCircle, Users 
 } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { supabase } from "@/lib/supabase";
+import { getApiUrl } from "@/lib/api";
 import type { RescueCase } from "@/types/rescue";
 
 interface ReporterDetails {
@@ -18,8 +25,10 @@ interface ReporterDetails {
 }
 
 export default function DashboardPage() {
-  const { user, profile, loading, logout, refetchProfile } = useAuth();
+  const { user, profile, loading, signOut, refetchProfile } = useAuth();
   const router = useRouter();
+  const { data: stats, loading: statsLoading } = useDashboardStats();
+  const { notifications, markAsRead } = useNotifications(user?.id);
   const [isAvailable, setIsAvailable] = useState(false);
   const [togglingAvail, setTogglingAvail] = useState(false);
   
@@ -31,7 +40,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      router.push("/login");
+      router.push("/auth/login");
       return;
     }
     if (profile && !profile.full_name) {
@@ -55,15 +64,12 @@ export default function DashboardPage() {
       let query = supabase
         .from("rescue_cases")
         .select("*")
-        .order("created_at", { ascending: false })
-        .limit(10);
+        .order("created_at", { ascending: false });
 
-      if (profile.area_name && profile.city_name) {
-        if (scope === "area" && profile.area_name) {
-          query = query.eq("area_name", profile.area_name);
-        } else if (scope === "city" && profile.city_name) {
-          query = query.eq("city_name", profile.city_name);
-        }
+      if (profile.area_name && scope === "area") {
+        query = query.eq("area_name", profile.area_name);
+      } else if (profile.city_name && scope === "city") {
+        query = query.eq("city_name", profile.city_name);
       }
 
       const { data, error } = await query;
@@ -93,7 +99,7 @@ export default function DashboardPage() {
 
       setRescues(mapped);
     } catch (err: any) {
-      console.error("Failed to fetch rescue cases", err);
+      console.error("Failed to fetch rescue cases from Supabase", err);
       setRescues([]);
       toast.error("Failed to load rescue feed");
     } finally {
@@ -105,21 +111,9 @@ export default function DashboardPage() {
     if (!profile) return;
     fetchRescues();
 
-    // Subscribe to realtime updates on rescue_cases table
-    const channel = supabase
-      .channel("dashboard_rescues_realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "rescue_cases" },
-        () => {
-          fetchRescues();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // Poll every 15 seconds for realtime experience
+    const interval = setInterval(fetchRescues, 15000);
+    return () => clearInterval(interval);
   }, [profile, fetchRescues]);
 
   // Load reporter contact info on demand for assigned rescue cases
@@ -142,9 +136,11 @@ export default function DashboardPage() {
             .from("profiles")
             .select("full_name, phone")
             .eq("id", repId)
-            .single();
+            .maybeSingle();
 
-          if (!error && data) {
+          if (error) throw error;
+
+          if (data) {
             newDetails[repId] = {
               name: data.full_name || "Anonymous",
               phone: data.phone || "Not provided",
@@ -155,7 +151,7 @@ export default function DashboardPage() {
             updated = true;
           }
         } catch (err) {
-          console.error("Error loading reporter details:", err);
+          console.error("Error loading reporter details from Supabase:", err);
         }
       }
       if (updated) {
@@ -202,9 +198,9 @@ export default function DashboardPage() {
 
   const handleLogout = async () => {
     try {
-      await logout();
+      await signOut();
       toast.success("Successfully logged out");
-      router.push("/login");
+      router.push("/auth/login");
     } catch (error) {
       toast.error("Logout failed");
     }
@@ -237,14 +233,13 @@ export default function DashboardPage() {
         .from("rescue_cases")
         .update({
           status: "resolved",
-          resolved_by: user.id,
           resolved_at: new Date().toISOString(),
         })
         .eq("id", caseId);
 
       if (error) throw error;
 
-      toast.success("Rescue marked as completed! Awarded 🏅 Rescue Badge.");
+      toast.success("Rescue marked as completed!");
       fetchRescues();
     } catch (error: any) {
       console.error("Error resolving rescue case:", error);
@@ -257,17 +252,22 @@ export default function DashboardPage() {
     setTogglingAvail(true);
     try {
       const newVal = !isAvailable;
-      const { error } = await supabase
+      
+      const { error: profileErr } = await supabase
         .from("profiles")
-        .update({ available_now: newVal })
+        .update({
+          available_now: newVal,
+          updated_at: new Date().toISOString()
+        })
         .eq("id", user.id);
 
-      if (error) throw error;
+      if (profileErr) throw profileErr;
 
       setIsAvailable(newVal);
       toast.success(newVal ? "You're now showing as available 🟢" : "Availability set to offline");
       refetchProfile();
     } catch (err) {
+      console.error("Availability toggle error:", err);
       toast.error("Failed to update availability");
     } finally {
       setTogglingAvail(false);
@@ -357,7 +357,7 @@ export default function DashboardPage() {
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
                 border: "1px solid rgba(102, 187, 106, 0.15)",
-                borderRadius: "var(--radius-2xl)",
+                borderRadius: "16px",
                 padding: "28px",
                 display: "flex",
                 flexWrap: "wrap",
@@ -399,7 +399,7 @@ export default function DashboardPage() {
                       background: "rgba(102, 187, 106, 0.15)",
                       color: "#A5D6A7",
                       padding: "4px 10px",
-                      borderRadius: "var(--radius-full)",
+                      borderRadius: "12px",
                       fontSize: "0.75rem",
                       fontWeight: 600,
                       border: "1px solid rgba(102, 187, 106, 0.3)",
@@ -431,7 +431,7 @@ export default function DashboardPage() {
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
                 border: "1px solid rgba(102, 187, 106, 0.15)",
-                borderRadius: "var(--radius-2xl)",
+                borderRadius: "16px",
                 padding: "24px",
                 display: "flex",
                 flexDirection: "column",
@@ -449,7 +449,7 @@ export default function DashboardPage() {
                         background: "rgba(102, 187, 106, 0.1)",
                         border: "1px solid rgba(102, 187, 106, 0.25)",
                         color: "#A5D6A7",
-                        borderRadius: "var(--radius-full)",
+                        borderRadius: "12px",
                         padding: "4px 12px",
                         fontWeight: 600,
                         fontSize: "0.72rem",
@@ -481,7 +481,7 @@ export default function DashboardPage() {
                         background: isAvailable ? "rgba(102,187,106,0.15)" : "rgba(255,255,255,0.06)",
                         border: `1px solid ${isAvailable ? "rgba(102,187,106,0.4)" : "rgba(255,255,255,0.1)"}`,
                         color: isAvailable ? "#66BB6A" : "rgba(232,245,233,0.4)",
-                        borderRadius: "var(--radius-full)",
+                        borderRadius: "20px",
                         padding: "6px 14px",
                         fontSize: "0.72rem",
                         fontWeight: 700,
@@ -498,6 +498,39 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Stats Row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "20px" }}>
+            {[
+              { title: "Active Volunteers", value: stats?.volunteers ?? 0, icon: <Users size={18} style={{ color: "#66BB6A" }} /> },
+              { title: "NGO Partners", value: stats?.ngos ?? 0, icon: <Shield size={18} style={{ color: "#42A5F5" }} /> },
+              { title: "Total Rescues", value: stats?.rescues ?? 0, icon: <Activity size={18} style={{ color: "#EF5350" }} /> },
+              { title: "Completed Rescues", value: stats?.resolvedRescues ?? 0, icon: <CheckCircle size={18} style={{ color: "#81C784" }} /> }
+            ].map((stat, idx) => (
+              <div
+                key={idx}
+                className="stat-card"
+                style={{
+                  background: "rgba(21, 35, 23, 0.45)",
+                  backdropFilter: "blur(20px)",
+                  border: "1px solid rgba(102, 187, 106, 0.15)",
+                  borderRadius: "16px",
+                  padding: "20px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: "0.8rem", color: "rgba(232, 245, 233, 0.6)", fontWeight: 600, textTransform: "uppercase" }}>{stat.title}</span>
+                  <div style={{ fontSize: "1.75rem", fontWeight: 800, marginTop: "6px" }}>{stat.value}</div>
+                </div>
+                <div style={{ background: "rgba(102, 187, 106, 0.1)", padding: "10px", borderRadius: "12px" }}>
+                  {stat.icon}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {/* Bottom Row: Active Cases Feed + Actions */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "32px" }} className="bottom-row-grid">
             {/* Active Cases Feed */}
@@ -507,7 +540,7 @@ export default function DashboardPage() {
                 backdropFilter: "blur(20px)",
                 WebkitBackdropFilter: "blur(20px)",
                 border: "1px solid rgba(102, 187, 106, 0.15)",
-                borderRadius: "var(--radius-2xl)",
+                borderRadius: "16px",
                 padding: "28px",
               }}
             >
@@ -666,7 +699,7 @@ export default function DashboardPage() {
                               padding: "10px 14px",
                               background: "rgba(102, 187, 106, 0.08)",
                               border: "1px solid rgba(102, 187, 106, 0.2)",
-                              borderRadius: "var(--radius-lg)",
+                              borderRadius: "8px",
                               fontSize: "0.8rem",
                             }}>
                               <div style={{ fontWeight: 600, color: "#A5D6A7", marginBottom: "4px" }}>📞 Reporter Contact Details:</div>
@@ -721,7 +754,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <h4 style={{ color: "#EF5350", fontWeight: 700, margin: 0 }}>🚨 Report SOS Case</h4>
-                      <p style={{ color: "rgba(232, 245, 233, 0.6)", fontSize: "0.8rem", margin: "4px 0 0 0" }}>Instantly alert nearby rescuers and dispatch team</p>
+                      <p style={{ color: "rgba(232, 245, 233, 0.6)", fontSize: "0.8rem", margin: "4px 0 0 0" }}>Instantly alert rescuers and dispatch team</p>
                     </div>
                   </div>
                 </div>
@@ -754,6 +787,47 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </Link>
+
+              {/* Notifications & Alerts Card */}
+              <div
+                style={{
+                  background: "rgba(21, 35, 23, 0.45)",
+                  backdropFilter: "blur(20px)",
+                  border: "1px solid rgba(102, 187, 106, 0.15)",
+                  borderRadius: "16px",
+                  padding: "24px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "16px"
+                }}
+              >
+                <h4 style={{ color: "#A5D6A7", fontWeight: 700, margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Bell size={18} style={{ color: "#66BB6A" }} /> Notifications & Alerts
+                </h4>
+                {notifications.length === 0 ? (
+                  <p style={{ color: "rgba(232, 245, 233, 0.45)", fontSize: "0.82rem", margin: 0 }}>No new notifications.</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "200px", overflowY: "auto" }}>
+                    {notifications.slice(0, 5).map((notif) => (
+                      <div
+                        key={notif.id}
+                        onClick={() => !notif.is_read && markAsRead(notif.id)}
+                        style={{
+                          padding: "10px 12px",
+                          background: notif.is_read ? "rgba(10, 16, 11, 0.3)" : "rgba(102, 187, 106, 0.08)",
+                          border: `1px solid ${notif.is_read ? "rgba(102, 187, 106, 0.05)" : "rgba(102, 187, 106, 0.2)"}`,
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          transition: "all 0.15s"
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, fontSize: "0.8rem", color: notif.is_read ? "rgba(232, 245, 233, 0.85)" : "#A5D6A7" }}>{notif.title}</div>
+                        {notif.body && <p style={{ margin: "4px 0 0 0", fontSize: "0.75rem", color: "rgba(232, 245, 233, 0.55)" }}>{notif.body}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -764,20 +838,14 @@ export default function DashboardPage() {
           margin-top: 10px;
         }
         .stat-card {
-          background: rgba(21, 35, 23, 0.45);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(102, 187, 106, 0.15);
-          border-radius: var(--radius-xl);
-          padding: 24px;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
         }
         .case-item {
           background: rgba(10, 16, 11, 0.5);
           border: 1px solid rgba(102, 187, 106, 0.1);
-          border-radius: var(--radius-xl);
+          border-radius: 12px;
           padding: 16px;
-          transition: all var(--transition-base);
+          transition: all 0.2s;
         }
         .case-item:hover {
           border-color: rgba(102, 187, 106, 0.25);
@@ -788,12 +856,12 @@ export default function DashboardPage() {
           border: 1px solid rgba(102, 187, 106, 0.25);
           color: #A5D6A7;
           padding: 6px 12px;
-          border-radius: var(--radius-md);
+          border-radius: 6px;
           font-weight: 600;
           cursor: pointer;
           font-size: 0.75rem;
           font-family: var(--font-sans);
-          transition: all var(--transition-fast);
+          transition: all 0.15s;
         }
         .action-btn:hover {
           background: #388E3C;
@@ -815,10 +883,10 @@ export default function DashboardPage() {
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
           border: 1px solid rgba(102, 187, 106, 0.15);
-          border-radius: var(--radius-xl);
+          border-radius: 12px;
           padding: 20px;
           cursor: pointer;
-          transition: all var(--transition-base);
+          transition: all 0.2s;
         }
         .action-card:hover {
           transform: translateY(-2px);
@@ -834,6 +902,7 @@ export default function DashboardPage() {
           animation: spin 0.8s linear infinite;
           margin: 20px auto;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
         @media (min-width: 992px) {
           .top-row {
             grid-template-columns: 2fr 1fr !important;

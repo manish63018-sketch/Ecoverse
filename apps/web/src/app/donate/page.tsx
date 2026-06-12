@@ -81,7 +81,7 @@ export default function DonatePage() {
     return `₹${amount} = One whole week of rescue shelter care, recovery food, and medical checkups.`;
   };
 
-  const totalRaised = donors.reduce((sum, d) => sum + d.amount, 0) + 1750; // simulated seed offset
+  const totalRaised = donors.reduce((sum, d) => sum + d.amount, 0) + 0; // simulated seed offset
 
   return (
     <div style={{ background: "#050f07", minHeight: "100vh", color: "#FFFFFF", fontFamily: "var(--font-sans), sans-serif" }}>

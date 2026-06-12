@@ -25,10 +25,11 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   let body: {
     firebase_uid: string;
-    state_id: string;
-    city_id: string;
-    area_id: string;
+    state_id?: string;
+    city_id?: string;
+    area_id?: string;
     fcm_token?: string;
+    available_now?: boolean;
     volunteer_lat?: number;
     volunteer_lng?: number;
   };
@@ -39,15 +40,26 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (!body.firebase_uid || !body.state_id || !body.city_id || !body.area_id) {
+  if (!body.firebase_uid) {
+    return NextResponse.json({ error: 'firebase_uid is required' }, { status: 400 });
+  }
+
+  // Fetch existing profile to merge/fallback
+  const existingProfile = await getUserLocationProfile(body.firebase_uid);
+
+  const state_id = body.state_id || existingProfile?.state_id;
+  const city_id = body.city_id || existingProfile?.city_id;
+  const area_id = body.area_id || existingProfile?.area_id;
+
+  if (!state_id || !city_id || !area_id) {
     return NextResponse.json(
-      { error: 'firebase_uid, state_id, city_id, and area_id are all required' },
+      { error: 'Location profile not initialized yet. state_id, city_id, and area_id are required' },
       { status: 400 }
     );
   }
 
   // Validate hierarchy integrity
-  const valid = await validateLocationHierarchy(body.area_id, body.city_id, body.state_id);
+  const valid = await validateLocationHierarchy(area_id, city_id, state_id);
   if (!valid) {
     return NextResponse.json(
       {
@@ -59,7 +71,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   // Build display zone
-  const locationInfo = await buildDisplayZone(body.area_id);
+  const locationInfo = await buildDisplayZone(area_id);
 
   // Round GPS to area-level precision (2dp = ~1.1km) for volunteer privacy
   const roundedLat = body.volunteer_lat != null
@@ -70,11 +82,11 @@ export async function PATCH(req: NextRequest) {
     : undefined;
 
   await upsertUserLocation(body.firebase_uid, {
-    state_id: body.state_id,
-    city_id: body.city_id,
-    area_id: body.area_id,
+    state_id,
+    city_id,
+    area_id,
     fcm_token: body.fcm_token,
-    available_now: false, // availability is toggled separately
+    available_now: body.available_now !== undefined ? body.available_now : undefined,
     volunteer_lat: roundedLat,
     volunteer_lng: roundedLng,
   });
