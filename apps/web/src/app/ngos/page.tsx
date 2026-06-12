@@ -4,8 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { Building2, Search, X, CheckCircle, Upload, MapPin, Award, User, MessageSquare } from "lucide-react";
 import toast from "react-hot-toast";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import PageHero from "@/components/PageHero";
@@ -58,32 +57,31 @@ export default function NGOPage() {
   const [reqDesc, setReqDesc] = useState("");
   const [sendingRequest, setSendingRequest] = useState(false);
 
-  // Listen to NGOs in Firestore
+  // Fetch NGOs from Supabase
   useEffect(() => {
-    const q = query(collection(db, "public_profiles"), where("roles", "array-contains", "ngo"));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: NGO[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.ngoInfo) {
-            const cityProper = data.city ? data.city.charAt(0).toUpperCase() + data.city.slice(1) : "Hyderabad";
-            list.push({
-              id: docSnap.id,
-              name: data.ngoInfo.orgName || data.displayName || "Partner NGO",
-              city: cityProper,
-              location: data.ngoInfo.areaName || "Main City Zone",
-              helpline: data.ngoInfo.emergencyContact || "+91 99999 99999",
-              email: data.ngoInfo.email || "support@ecoverse.org",
-              services: data.ngoInfo.causeType ? [data.ngoInfo.causeType] : ["Stray Welfare", "Emergency Rescue"],
-              description: data.ngoInfo.description || `Providing animal support services in ${cityProper}.`,
-              verified: data.ngoInfo.verified ?? true,
-            });
-          }
-        });
+    async function fetchNgos() {
+      setLoadingNgos(true);
+      try {
+        const { data, error } = await supabase
+          .from("ngos")
+          .select("*")
+          .eq("is_active", true);
 
-        // Add 3 starter NGOs if Firestore is empty
+        if (error) throw error;
+
+        const list: NGO[] = (data || []).map((ngo: any) => ({
+          id: ngo.id,
+          name: ngo.name,
+          city: ngo.city_name || "India",
+          location: ngo.state_name || "Active Zone",
+          helpline: ngo.contact_phone || "+91 99999 99999",
+          email: ngo.contact_email || "support@ecoverse.org",
+          services: ngo.focus_areas || ["Rescue", "Stray Welfare"],
+          description: ngo.description || `Providing services in ${ngo.city_name}`,
+          verified: ngo.is_verified,
+        }));
+
+        // Add 3 starter NGOs if database is empty
         if (list.length === 0) {
           list.push(
             {
@@ -122,38 +120,72 @@ export default function NGOPage() {
           );
         }
         setNgos(list);
-        setLoadingNgos(false);
-      },
-      (err) => {
-        console.warn("NGO Firestore error:", err);
+      } catch (err) {
+        console.warn("Failed to fetch NGOs from Supabase:", err);
+        setNgos([
+          {
+            id: "ngo-1",
+            name: "PAWS Hyderabad",
+            city: "Hyderabad",
+            location: "Banjara Hills",
+            helpline: "+91 98850 12345",
+            email: "contact@pawshyderabad.org",
+            services: ["Dog Rescue", "Cat Adoption", "Sterilization"],
+            description: "Example — Providing round-the-clock emergency medical response and birth control programs for stray canines and felines in Hyderabad.",
+            verified: true,
+          },
+          {
+            id: "ngo-2",
+            name: "Blue Cross of India",
+            city: "Chennai",
+            location: "Guindy",
+            helpline: "+91 44 2235 4958",
+            email: "bluecrosschennai@gmail.com",
+            services: ["Multi-animal Shelter", "Ambulance", "Veterinary Care"],
+            description: "Example — One of India's largest animal welfare organizations, running rescue operations, shelters, and medical clinics since 1964.",
+            verified: true,
+          },
+          {
+            id: "ngo-3",
+            name: "Friendicoes SECA",
+            city: "Delhi",
+            location: "Defence Colony",
+            helpline: "+91 11 2432 0543",
+            email: "shelter@friendicoes.org",
+            services: ["Stray Rescue", "Animal Adoption", "Mobile Equine Clinic"],
+            description: "Example — Serving Delhi NCR street animals for over 40 years with shelter homes, diagnostic labs, and mobile healthcare vans.",
+            verified: true,
+          }
+        ]);
+      } finally {
         setLoadingNgos(false);
       }
-    );
-    return () => unsubscribe();
+    }
+
+    fetchNgos();
   }, []);
 
-  // Listen to Volunteers in Firestore
+  // Fetch Volunteers from Supabase
   useEffect(() => {
-    const q = query(collection(db, "public_profiles"), where("roles", "array-contains", "volunteer"));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: Volunteer[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.volunteerInfo) {
-            list.push({
-              id: docSnap.id,
-              name: data.displayName || "EcoVerse Volunteer",
-              roles: data.volunteerInfo.skills || ["General Volunteer"],
-              city: data.city || "Hyderabad",
-              area: data.volunteerInfo.areaName || "Active Zone",
-              rescuesCount: data.volunteerInfo.rescuesCount || 0,
-            });
-          }
-        });
+    async function fetchVolunteers() {
+      setLoadingVols(true);
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .contains("roles", ["volunteer"]);
 
-        // Add 2 real-looking starter volunteers if empty
+        if (error) throw error;
+
+        const list: Volunteer[] = (data || []).map((prof: any) => ({
+          id: prof.id,
+          name: prof.full_name || "EcoVerse Volunteer",
+          roles: prof.roles || ["volunteer"],
+          city: prof.city_name || "India",
+          area: prof.area_name || "Active Zone",
+          rescuesCount: prof.rescue_count || 0,
+        }));
+
         if (list.length === 0) {
           list.push(
             {
@@ -175,14 +207,32 @@ export default function NGOPage() {
           );
         }
         setVolunteers(list);
-        setLoadingVols(false);
-      },
-      (err) => {
-        console.warn("Volunteer Firestore error:", err);
+      } catch (err) {
+        console.warn("Failed to fetch volunteers from Supabase:", err);
+        setVolunteers([
+          {
+            id: "vol-1",
+            name: "Arjun Sharma",
+            roles: ["Animal Rescuer", "Feeder"],
+            city: "Bengaluru",
+            area: "Indiranagar",
+            rescuesCount: 12,
+          },
+          {
+            id: "vol-2",
+            name: "Kavya Reddy",
+            roles: ["Foster/Adopter", "General Volunteer"],
+            city: "Pune",
+            area: "Koregaon Park",
+            rescuesCount: 3,
+          }
+        ]);
+      } finally {
         setLoadingVols(false);
       }
-    );
-    return () => unsubscribe();
+    }
+
+    fetchVolunteers();
   }, []);
 
   // Filter lists

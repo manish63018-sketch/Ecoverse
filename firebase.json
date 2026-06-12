@@ -22,7 +22,7 @@
       "**/node_modules/**"
     ],
     "cleanUrls": true,
-    "trailingSlash": false,
+    "trailingSlash": true,
     "rewrites": [
       { "source": "/adopt/!(fallback|*.js|*.css|*.png|*.jpg|*.svg|*.ico|*.json)", "destination": "/adopt/fallback.html" },
       { "source": "/rescue/!(fallback|*.js|*.css|*.png|*.jpg|*.svg|*.ico|*.json)", "destination": "/rescue/fallback.html" }

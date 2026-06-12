@@ -8,8 +8,7 @@ import {
   Clock, X, Mail, Phone, Sparkles, AlertCircle 
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { supabase } from "@/lib/supabase";
 
 interface Volunteer {
   id: string;
@@ -38,26 +37,65 @@ export default function VolunteerDirectoryPage() {
   const [inquiryMessage, setInquiryMessage] = useState("");
 
   useEffect(() => {
-    const q = query(
-      collection(db, "public_profiles"),
-      where("roles", "array-contains", "volunteer")
-    );
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: Volunteer[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() } as Volunteer);
-        });
+    async function fetchVolunteers() {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .contains("roles", ["volunteer"]);
+
+        if (error) throw error;
+
+        const list = (data || []).map((prof: any) => ({
+          id: prof.id,
+          displayName: prof.full_name || "EcoVerse Volunteer",
+          city: prof.city_name || "India",
+          roles: prof.roles || ["volunteer"],
+          volunteerInfo: {
+            availableNow: prof.available_now || false,
+            hoursPerWeek: prof.volunteer_hours || 5,
+            radiusKm: 10,
+            skills: ["First Aid", "Animal Handling"]
+          }
+        }));
+
         setVolunteers(list);
-        setLoading(false);
-      },
-      (error) => {
-        console.warn("Failed to listen to volunteers:", error);
+      } catch (err) {
+        console.warn("Failed to load volunteers from Supabase:", err);
+        // Fallback mock volunteers
+        setVolunteers([
+          {
+            id: "mock-v1",
+            displayName: "Amit Sharma",
+            city: "Mumbai",
+            roles: ["volunteer", "rescuer"],
+            volunteerInfo: {
+              availableNow: true,
+              hoursPerWeek: 8,
+              radiusKm: 5,
+              skills: ["First Aid", "Dog Handling"]
+            }
+          },
+          {
+            id: "mock-v2",
+            displayName: "Priya Patel",
+            city: "Pune",
+            roles: ["volunteer", "transport"],
+            volunteerInfo: {
+              availableNow: false,
+              hoursPerWeek: 4,
+              radiusKm: 15,
+              skills: ["Transport", "Cat Handling"]
+            }
+          }
+        ]);
+      } finally {
         setLoading(false);
       }
-    );
-    return () => unsubscribe();
+    }
+
+    fetchVolunteers();
   }, []);
 
   const filteredVolunteers = volunteers.filter((vol) => {

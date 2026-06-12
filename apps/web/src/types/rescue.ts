@@ -10,6 +10,7 @@ export type ResponseType = 'accepted' | 'declined' | 'no_response';
 export interface RescueCase {
   id: string;
   reporter_user_id?: string;
+  reporter_name?: string;
 
   // Location — ALL THREE required
   state_id: string;

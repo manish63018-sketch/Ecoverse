@@ -3,13 +3,10 @@ import { execSync } from 'child_process';
 
 const apiPath = './src/app/api';
 const backupPath = './api-backup';
-const middlewarePath = './src/middleware.ts';
-const middlewareBackupPath = './middleware-backup.ts';
 const proxyPath = './src/proxy.ts';
-const proxyBackupPath = './proxy-backup.ts';
+const proxyBackupPath = './proxy-backup.ts.bak';
 
 let apiRenamed = false;
-let middlewareRenamed = false;
 let proxyRenamed = false;
 
 try {
@@ -20,12 +17,7 @@ try {
     console.log('Backed up api directory.');
   }
 
-  // 2. Rename middleware/proxy files if they exist to avoid export warnings/failures
-  if (existsSync(middlewarePath)) {
-    renameSync(middlewarePath, middlewareBackupPath);
-    middlewareRenamed = true;
-    console.log('Backed up middleware.ts.');
-  }
+  // 2. Rename proxy files if they exist to avoid export warnings/failures
   if (existsSync(proxyPath)) {
     renameSync(proxyPath, proxyBackupPath);
     proxyRenamed = true;
@@ -48,10 +40,6 @@ try {
   if (apiRenamed && existsSync(backupPath)) {
     renameSync(backupPath, apiPath);
     console.log('Restored api directory.');
-  }
-  if (middlewareRenamed && existsSync(middlewareBackupPath)) {
-    renameSync(middlewareBackupPath, middlewarePath);
-    console.log('Restored middleware.ts.');
   }
   if (proxyRenamed && existsSync(proxyBackupPath)) {
     renameSync(proxyBackupPath, proxyPath);
