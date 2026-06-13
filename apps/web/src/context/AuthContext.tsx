@@ -22,9 +22,13 @@ interface AuthContextType {
     password: string,
     fullName: string,
     username: string,
-    role: string,
+    roles: string[],
+    primaryRole: string,
     city: string,
-    state: string
+    state: string,
+    area?: string,
+    phone?: string,
+    availableNow?: boolean
   ) => Promise<any>;
   logout: () => Promise<void>;
   refetchProfile: () => Promise<void>;
@@ -50,6 +54,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(data as Profile);
         return data as Profile;
       }
+
+      // Safe fallback profile creation if row is missing
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.id === userId) {
+        const fallbackProfile = {
+          id: user.id,
+          full_name: user.user_metadata?.full_name || 'EcoVerse User',
+          username: user.user_metadata?.username || 'user_' + user.id.substring(0, 8),
+          email: user.email || '',
+          state_name: user.user_metadata?.state_name || 'Delhi',
+          city_name: user.user_metadata?.city_name || 'New Delhi',
+          area_name: user.user_metadata?.area_name || null,
+          roles: user.user_metadata?.roles || ['volunteer'],
+          primary_role: user.user_metadata?.primary_role || 'volunteer',
+          available_now: !!user.user_metadata?.available_now,
+          verification_status: 'unverified',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        const { data: newProfile, error: insertError } = await supabase
+          .from("profiles")
+          .insert(fallbackProfile)
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error("Failed to insert fallback profile:", insertError);
+        } else if (newProfile) {
+          setProfile(newProfile as Profile);
+          return newProfile as Profile;
+        }
+      }
+
       setProfile(null);
       return null;
     } catch (err) {
@@ -129,13 +167,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     fullName: string,
     username: string,
-    role: string,
+    roles: string[],
+    primaryRole: string,
     city: string,
-    state: string
+    state: string,
+    area: string = "",
+    phone: string = "",
+    availableNow: boolean = false
   ) => {
     try {
       setLoading(true);
-      const user = await signUp(email, password, fullName, username, role, city, state);
+      const user = await signUp(email, password, fullName, username, roles, primaryRole, city, state, area, phone, availableNow);
       return user;
     } finally {
       setLoading(false);

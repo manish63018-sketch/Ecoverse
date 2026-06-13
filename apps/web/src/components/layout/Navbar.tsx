@@ -14,6 +14,7 @@ const navLinks = [
   { label: "Rescue", href: "/rescue", highlight: true },
   { label: "Adopt", href: "/adopt" },
   { label: "Knowledge", href: "/knowledge" },
+  { label: "DevLab", href: "/devlab" },
   { label: "NGOs", href: "/ngos" },
   { label: "💚 Donate", href: "/donate" },
 ];

@@ -71,9 +71,13 @@ export async function signUp(
   password: string, 
   fullName: string, 
   username: string,
-  role: string,
+  roles: string[],
+  primaryRole: string,
   city: string,
-  state: string
+  state: string,
+  area: string = "",
+  phone: string = "",
+  availableNow: boolean = false
 ) {
   try {
     const { data, error } = await supabase.auth.signUp({
@@ -83,9 +87,13 @@ export async function signUp(
         data: {
           full_name: fullName,
           username: username.toLowerCase().trim(),
-          role: role,
+          roles: roles,
+          primary_role: primaryRole,
           city_name: city,
           state_name: state,
+          area_name: area,
+          phone: phone,
+          available_now: availableNow,
         },
         emailRedirectTo: `${window.location.origin}/auth/login`,
       }

@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { signUp } from '@/lib/auth'
 import { INDIA_STATES, getCitiesForState } from '@/data/india-locations'
 
 const ROLES = [
@@ -66,41 +67,47 @@ export default function SignupPage() {
     }
     setLoading(true)
     try {
-      const { data, error: authError } =
-        await supabase.auth.signUp({
-          email: form.email,
-          password: form.password,
-          options: {
-            data: {
+      const user = await signUp(
+        form.email,
+        form.password,
+        form.full_name,
+        form.username,
+        form.roles,
+        form.roles[0] ?? 'volunteer',
+        form.city_name,
+        form.state_name,
+        form.area_name,
+        form.phone,
+        form.available_now
+      )
+
+      if (user) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
               full_name: form.full_name,
               username: form.username,
-            }
-          }
-        })
-      if (authError) throw authError
-
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            full_name: form.full_name,
-            username: form.username,
-            phone: form.phone,
-            state_name: form.state_name,
-            city_name: form.city_name,
-            area_name: form.area_name,
-            roles: form.roles,
-            primary_role: form.roles[0] ?? 'volunteer',
-            available_now: form.available_now,
-          })
-          .eq('id', data.user.id)
-        if (profileError) throw profileError
+              phone: form.phone,
+              state_name: form.state_name,
+              city_name: form.city_name,
+              area_name: form.area_name,
+              roles: form.roles,
+              primary_role: form.roles[0] ?? 'volunteer',
+              available_now: form.available_now,
+            })
+            .eq('id', user.id)
+        } catch (updateErr) {
+          console.warn("Client-side profile update failed/skipped (which is expected if email confirmation is required):", updateErr)
+        }
         router.push('/dashboard')
       }
     } catch (e: any) {
       console.error('Signup error details:', e)
       const msg = e?.message ?? ''
-      if (msg.includes('already registered'))
+      if (msg.includes('Failed to fetch') || msg.includes('fetch') || msg.includes('TypeError')) {
+        setError('Connection error: Could not connect to the Supabase server. Please verify your connection or project settings in .env.local.')
+      } else if (msg.includes('already registered'))
         setError('This email is already registered. Please login.')
       else if (msg.includes('Password'))
         setError('Password must be at least 6 characters.')

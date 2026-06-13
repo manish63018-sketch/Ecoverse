@@ -1,4 +1,4 @@
-import { renameSync, existsSync } from 'fs';
+import { renameSync, existsSync, rmSync } from 'fs';
 import { execSync } from 'child_process';
 
 const apiPath = './src/app/api';
@@ -10,6 +10,11 @@ let apiRenamed = false;
 let proxyRenamed = false;
 
 try {
+  // 0. Clean .next directory to remove stale dev type check cache
+  if (existsSync('.next')) {
+    rmSync('.next', { recursive: true, force: true });
+    console.log('Cleared .next directory cache.');
+  }
   // 1. Rename api directory to hide it from static build
   if (existsSync(apiPath)) {
     renameSync(apiPath, backupPath);

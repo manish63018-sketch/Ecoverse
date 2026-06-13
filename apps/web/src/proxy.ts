@@ -34,7 +34,18 @@ export async function proxy(request: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const protectedPaths = ["/dashboard", "/profile", "/settings", "/admin", "/moderation"];
+  const protectedPaths = [
+    "/dashboard",
+    "/profile",
+    "/settings",
+    "/admin",
+    "/moderation",
+    "/rescue",
+    "/community",
+    "/map",
+    "/ngos",
+    "/adopt"
+  ];
   const adminPaths = ["/admin"];
   const modPaths = ["/moderation"];
   const path = request.nextUrl.pathname;

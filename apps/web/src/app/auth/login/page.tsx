@@ -23,7 +23,9 @@ export default function LoginPage() {
       router.push('/dashboard')
     } catch (e: any) {
       const msg = e?.message ?? ''
-      if (msg.includes('Invalid login'))
+      if (msg.includes('Failed to fetch') || msg.includes('fetch') || msg.includes('TypeError')) {
+        setError('Connection error: Could not connect to the Supabase server. Please verify your connection or project settings in .env.local.')
+      } else if (msg.includes('Invalid login'))
         setError('Email or password is incorrect.')
       else if (msg.includes('Email not confirmed'))
         setError('Please verify your email first.')

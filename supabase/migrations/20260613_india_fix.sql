@@ -2,14 +2,37 @@
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, username, email)
+  INSERT INTO public.profiles (
+    id, 
+    full_name, 
+    username, 
+    email, 
+    phone,
+    state_name, 
+    city_name, 
+    area_name, 
+    roles, 
+    primary_role,
+    available_now
+  )
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', 'EcoVerse User'),
-    COALESCE(NEW.raw_user_meta_data->>'username',
-             'user_' || substr(NEW.id::text, 1, 8)),
-    NEW.email
-  );
+    COALESCE(NEW.raw_user_meta_data->>'username', 'user_' || substr(NEW.id::text, 1, 8)),
+    NEW.email,
+    NEW.raw_user_meta_data->>'phone',
+    COALESCE(NEW.raw_user_meta_data->>'state_name', 'Delhi'),
+    COALESCE(NEW.raw_user_meta_data->>'city_name', 'New Delhi'),
+    NEW.raw_user_meta_data->>'area_name',
+    COALESCE(
+      ARRAY(SELECT jsonb_array_elements_text(NEW.raw_user_meta_data->'roles')),
+      ARRAY['volunteer']
+    ),
+    COALESCE(NEW.raw_user_meta_data->>'primary_role', 'volunteer'),
+    COALESCE((NEW.raw_user_meta_data->>'available_now')::boolean, false)
+  )
+  ON CONFLICT (id) DO NOTHING;
+
   INSERT INTO public.notifications
     (user_id, type, title, body, link_to)
   VALUES (
