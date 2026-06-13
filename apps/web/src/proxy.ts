@@ -40,7 +40,9 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   if (protectedPaths.some((p) => path.startsWith(p)) && !session) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const loginUrl = new URL("/auth/login", request.url);
+    loginUrl.searchParams.set("redirect", path);
+    return NextResponse.redirect(loginUrl);
   }
 
   if (session) {

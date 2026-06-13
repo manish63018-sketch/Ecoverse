@@ -11,6 +11,7 @@ import PageHero from "@/components/PageHero";
 import EmptyState from "@/components/EmptyState";
 import NGOCard, { NGO } from "@/components/NGOCard";
 import VolunteerCard, { Volunteer } from "@/components/VolunteerCard";
+import { INDIA_STATES, getCitiesForState } from "@/data/india-locations";
 
 type TabPanel = "ngo_dir" | "vol_net" | "join_ngo" | "join_vol";
 
@@ -42,6 +43,7 @@ export default function NGOPage() {
   const [volName, setVolName] = useState("");
   const [volEmail, setVolEmail] = useState("");
   const [volPhone, setVolPhone] = useState("");
+  const [volState, setVolState] = useState("");
   const [volCity, setVolCity] = useState("");
   const [volArea, setVolArea] = useState("");
   const [volRoles, setVolRoles] = useState<string[]>([]);
@@ -167,7 +169,7 @@ export default function NGOPage() {
 
   const handleVolSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!volName.trim() || !volEmail.trim() || !volPhone.trim() || !volCity.trim()) {
+    if (!volName.trim() || !volEmail.trim() || !volPhone.trim() || !volCity.trim() || !volState.trim()) {
       return toast.error("Please fill in all required fields marked with *");
     }
     setSubmittingVol(true);
@@ -176,6 +178,7 @@ export default function NGOPage() {
       setVolName("");
       setVolEmail("");
       setVolPhone("");
+      setVolState("");
       setVolCity("");
       setVolArea("");
       setVolRoles([]);
@@ -383,12 +386,36 @@ export default function NGOPage() {
                   <input type="text" required placeholder="e.g. 1234/XYZ/2026" value={ngoRegNo} onChange={(e) => setNgoRegNo(e.target.value)} style={inputStyle} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={labelStyle}>City *</label>
-                  <input type="text" required placeholder="e.g. Hyderabad" value={ngoCity} onChange={(e) => setNgoCity(e.target.value)} style={inputStyle} />
+                  <label style={labelStyle}>State *</label>
+                  <select
+                    required
+                    value={ngoState}
+                    onChange={(e) => {
+                      setNgoState(e.target.value);
+                      setNgoCity("");
+                    }}
+                    style={{ ...inputStyle, background: "#0a1a0e" }}
+                  >
+                    <option value="">Select State</option>
+                    {INDIA_STATES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                  <label style={labelStyle}>State *</label>
-                  <input type="text" required placeholder="e.g. Telangana" value={ngoState} onChange={(e) => setNgoState(e.target.value)} style={inputStyle} />
+                  <label style={labelStyle}>City *</label>
+                  <select
+                    required
+                    value={ngoCity}
+                    onChange={(e) => setNgoCity(e.target.value)}
+                    disabled={!ngoState}
+                    style={{ ...inputStyle, background: "#0a1a0e" }}
+                  >
+                    <option value="">Select City</option>
+                    {getCitiesForState(ngoState).map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={labelStyle}>Pincode *</label>
@@ -475,8 +502,36 @@ export default function NGOPage() {
                   <input type="tel" required placeholder="e.g. +91 99999 XXXXX" value={volPhone} onChange={(e) => setVolPhone(e.target.value)} style={inputStyle} />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <label style={labelStyle}>State *</label>
+                  <select
+                    required
+                    value={volState}
+                    onChange={(e) => {
+                      setVolState(e.target.value);
+                      setVolCity("");
+                    }}
+                    style={{ ...inputStyle, background: "#0a1a0e" }}
+                  >
+                    <option value="">Select State</option>
+                    {INDIA_STATES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={labelStyle}>City *</label>
-                  <input type="text" required placeholder="e.g. Hyderabad" value={volCity} onChange={(e) => setVolCity(e.target.value)} style={inputStyle} />
+                  <select
+                    required
+                    value={volCity}
+                    onChange={(e) => setVolCity(e.target.value)}
+                    disabled={!volState}
+                    style={{ ...inputStyle, background: "#0a1a0e" }}
+                  >
+                    <option value="">Select City</option>
+                    {getCitiesForState(volState).map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                   <label style={labelStyle}>Area / Zone *</label>

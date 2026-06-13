@@ -236,7 +236,7 @@ export function Navbar() {
               </div>
             ) : (
               <Link
-                href="/login"
+                href="/auth/login"
                 className="btn btn-ghost hidden-mobile"
                 style={{ padding: "10px 24px", fontSize: "0.875rem" }}
               >
@@ -364,7 +364,7 @@ export function Navbar() {
                   Logout
                 </button>
               ) : (
-                <Link href="/login" onClick={() => setMobileOpen(false)} className="btn btn-ghost" style={{ flex: 1, fontSize: "0.9rem", textAlign: "center" }}>Login</Link>
+                <Link href="/auth/login" onClick={() => setMobileOpen(false)} className="btn btn-ghost" style={{ flex: 1, fontSize: "0.9rem", textAlign: "center" }}>Login</Link>
               )}
             </div>
           </div>

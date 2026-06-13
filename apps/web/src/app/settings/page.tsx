@@ -8,12 +8,15 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ArrowLeft, User, Bell, Lock, Heart, Save } from "lucide-react";
 import toast from "react-hot-toast";
+import { INDIA_STATES, getCitiesForState } from "@/data/india-locations";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface UserSettings {
   displayName: string;
   bio?: string;
+  state: string;
   city: string;
+  area: string;
   instagramHandle?: string;
   roles: string[];
   availableNow?: boolean;
@@ -78,7 +81,9 @@ export default function SettingsPage() {
       setSettings({
         displayName: rawProfile.full_name || "",
         bio: rawProfile.bio || "",
+        state: rawProfile.state_name || "",
         city: rawProfile.city_name || "",
+        area: rawProfile.area_name || "",
         instagramHandle: rawProfile.instagram_handle || "",
         roles: rawProfile.roles || [],
         availableNow: rawProfile.available_now || false,
@@ -111,7 +116,9 @@ export default function SettingsPage() {
         .update({
           full_name: settings.displayName,
           bio: settings.bio,
+          state_name: settings.state,
           city_name: settings.city,
+          area_name: settings.area,
           instagram_handle: settings.instagramHandle,
           roles: settings.roles,
           available_now: settings.availableNow,
@@ -298,11 +305,39 @@ export default function SettingsPage() {
                   style={{ ...inputStyle, resize: "vertical" }}
                 />
               </FormField>
+              <FormField label="State">
+                <select
+                  value={settings.state}
+                  onChange={(e) => {
+                    updateField("state", e.target.value);
+                    updateField("city", "");
+                  }}
+                  style={{ ...inputStyle, background: "#0a1a0e" }}
+                >
+                  <option value="">Select State</option>
+                  {INDIA_STATES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </FormField>
               <FormField label="City">
-                <input
+                <select
                   value={settings.city}
                   onChange={(e) => updateField("city", e.target.value)}
-                  placeholder="Hyderabad"
+                  disabled={!settings.state}
+                  style={{ ...inputStyle, background: "#0a1a0e" }}
+                >
+                  <option value="">Select City</option>
+                  {getCitiesForState(settings.state).map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Area / Zone">
+                <input
+                  value={settings.area}
+                  onChange={(e) => updateField("area", e.target.value)}
+                  placeholder="Banjara Hills, Koramangala..."
                   style={inputStyle}
                 />
               </FormField>

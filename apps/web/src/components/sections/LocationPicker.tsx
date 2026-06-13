@@ -1,14 +1,9 @@
 "use client";
 
-// ═══════════════════════════════════════════════════════════════
-// EcoVerse — 3-Level Location Picker Component
-// State → City → Area cascading dropdowns
-// Guarantees strict location isolation: never mixes areas
-// ═══════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useCallback } from "react";
 import { MapPin, ChevronDown, CheckCircle, Loader } from "lucide-react";
-import type { State, City, Area, LocationSelection } from "@/types/location";
-import { getStatesClient, getCitiesByStateClient, getAreasByCityClient } from "@/lib/locations-data";
+import type { LocationSelection } from "@/types/location";
+import { INDIA_STATES, getCitiesForState } from "@/data/india-locations";
 
 interface LocationPickerProps {
   onChange: (selection: LocationSelection | null) => void;
@@ -17,119 +12,35 @@ interface LocationPickerProps {
   compact?: boolean;
 }
 
-type LoadingKey = "states" | "cities" | "areas";
-
 export default function LocationPicker({
   onChange,
   initialSelection,
   required = true,
   compact = false,
 }: LocationPickerProps) {
-  const [states, setStates] = useState<State[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
-  const [areas, setAreas] = useState<Area[]>([]);
+  const [selectedState, setSelectedState] = useState(initialSelection?.stateName || initialSelection?.stateId || "");
+  const [selectedCity, setSelectedCity] = useState(initialSelection?.cityName || initialSelection?.cityId || "");
+  const [selectedArea, setSelectedArea] = useState(initialSelection?.areaName || initialSelection?.areaId || "");
 
-  const [selectedStateId, setSelectedStateId] = useState(initialSelection?.stateId ?? "");
-  const [selectedCityId, setSelectedCityId] = useState(initialSelection?.cityId ?? "");
-  const [selectedAreaId, setSelectedAreaId] = useState(initialSelection?.areaId ?? "");
-
-  const [loading, setLoading] = useState<Record<LoadingKey, boolean>>({
-    states: false, cities: false, areas: false,
-  });
-
-  const [error, setError] = useState<string | null>(null);
-
-  // Derived labels
-  const selectedState = states.find((s) => s.id === selectedStateId);
-  const selectedCity  = cities.find((c) => c.id === selectedCityId);
-  const selectedArea  = areas.find((a) => a.id === selectedAreaId);
-
-  const confirmed = !!(selectedStateId && selectedCityId && selectedAreaId);
-
-  // ── Load states on mount ──────────────────────────────────────
-  useEffect(() => {
-    const loadStates = async () => {
-      setLoading((prev) => ({ ...prev, states: true }));
-      try {
-        const data = getStatesClient();
-        setStates(data ?? []);
-      } catch {
-        setError("Failed to load states. Please refresh.");
-      } finally {
-        setLoading((prev) => ({ ...prev, states: false }));
-      }
-    };
-    loadStates();
-  }, []);
-
-  // ── Load cities when state changes ───────────────────────────
-  useEffect(() => {
-    if (!selectedStateId) {
-      setCities([]);
-      setAreas([]);
-      setSelectedCityId("");
-      setSelectedAreaId("");
-      return;
-    }
-
-    const loadCities = async () => {
-      setLoading((prev) => ({ ...prev, cities: true }));
-      setCities([]);
-      setAreas([]);
-      setSelectedCityId("");
-      setSelectedAreaId("");
-      try {
-        const data = getCitiesByStateClient(selectedStateId);
-        setCities(data ?? []);
-      } catch {
-        setError("Failed to load cities.");
-      } finally {
-        setLoading((prev) => ({ ...prev, cities: false }));
-      }
-    };
-    loadCities();
-  }, [selectedStateId]);
-
-  // ── Load areas when city changes ─────────────────────────────
-  useEffect(() => {
-    if (!selectedCityId) {
-      setAreas([]);
-      setSelectedAreaId("");
-      return;
-    }
-
-    const loadAreas = async () => {
-      setLoading((prev) => ({ ...prev, areas: true }));
-      setAreas([]);
-      setSelectedAreaId("");
-      try {
-        const data = getAreasByCityClient(selectedCityId);
-        setAreas(data ?? []);
-      } catch {
-        setError("Failed to load areas.");
-      } finally {
-        setLoading((prev) => ({ ...prev, areas: false }));
-      }
-    };
-    loadAreas();
-  }, [selectedCityId]);
+  const cities = getCitiesForState(selectedState);
+  const confirmed = !!(selectedState && selectedCity && selectedArea.trim());
 
   // ── Emit selection to parent ──────────────────────────────────
   const emitSelection = useCallback(() => {
-    if (selectedStateId && selectedCityId && selectedAreaId && selectedState && selectedCity && selectedArea) {
+    if (selectedState && selectedCity && selectedArea.trim()) {
       onChange({
-        stateId: selectedStateId,
-        cityId: selectedCityId,
-        areaId: selectedAreaId,
-        stateName: selectedState.name,
-        cityName: selectedCity.name,
-        areaName: selectedArea.name,
-        displayZone: `${selectedArea.name}, ${selectedCity.name}, ${selectedState.name}`,
+        stateId: selectedState,
+        cityId: selectedCity,
+        areaId: selectedArea.trim(),
+        stateName: selectedState,
+        cityName: selectedCity,
+        areaName: selectedArea.trim(),
+        displayZone: `${selectedArea.trim()}, ${selectedCity}, ${selectedState}`,
       });
     } else {
       onChange(null);
     }
-  }, [selectedStateId, selectedCityId, selectedAreaId, selectedState, selectedCity, selectedArea, onChange]);
+  }, [selectedState, selectedCity, selectedArea, onChange]);
 
   useEffect(() => {
     emitSelection();
@@ -149,6 +60,20 @@ export default function LocationPicker({
     WebkitAppearance: "none",
     cursor: "pointer",
     transition: "border-color 0.2s",
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    background: "rgba(10, 16, 11, 0.7)",
+    border: "1px solid rgba(102, 187, 106, 0.25)",
+    borderRadius: "10px",
+    padding: compact ? "9px 12px" : "11px 14px",
+    color: "#E8F5E9",
+    fontSize: compact ? "0.85rem" : "0.9rem",
+    fontFamily: "var(--font-sans), sans-serif",
+    outline: "none",
+    transition: "border-color 0.2s",
+    boxSizing: "border-box",
   };
 
   const labelStyle: React.CSSProperties = {
@@ -179,23 +104,7 @@ export default function LocationPicker({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Error message */}
-      {error && (
-        <div
-          style={{
-            padding: "10px 14px",
-            background: "rgba(239, 83, 80, 0.1)",
-            border: "1px solid rgba(239, 83, 80, 0.3)",
-            borderRadius: "8px",
-            fontSize: "0.8rem",
-            color: "#EF9A9A",
-          }}
-        >
-          ⚠️ {error}
-        </div>
-      )}
-
-      {/* Dropdowns row */}
+      {/* Dropdowns and Input row */}
       <div
         style={{
           display: "grid",
@@ -213,23 +122,23 @@ export default function LocationPicker({
           <div style={dropdownWrapper}>
             <select
               id="location-state"
-              value={selectedStateId}
-              onChange={(e) => setSelectedStateId(e.target.value)}
+              value={selectedState}
+              onChange={(e) => {
+                setSelectedState(e.target.value);
+                setSelectedCity("");
+              }}
               style={{
                 ...selectStyle,
-                borderColor: selectedStateId ? "rgba(102, 187, 106, 0.45)" : "rgba(102, 187, 106, 0.25)",
+                borderColor: selectedState ? "rgba(102, 187, 106, 0.45)" : "rgba(102, 187, 106, 0.25)",
               }}
-              disabled={loading.states}
             >
-              <option value="">
-                {loading.states ? "Loading states..." : "Select State"}
-              </option>
-              {states.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+              <option value="">Select State</option>
+              {INDIA_STATES.map((s) => (
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
             <span style={chevronStyle}>
-              {loading.states ? <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> : <ChevronDown size={14} />}
+              <ChevronDown size={14} />
             </span>
           </div>
         </div>
@@ -243,30 +152,28 @@ export default function LocationPicker({
           <div style={dropdownWrapper}>
             <select
               id="location-city"
-              value={selectedCityId}
-              onChange={(e) => setSelectedCityId(e.target.value)}
+              value={selectedCity}
+              onChange={(e) => setSelectedCity(e.target.value)}
               style={{
                 ...selectStyle,
-                borderColor: selectedCityId ? "rgba(102, 187, 106, 0.45)" : "rgba(102, 187, 106, 0.25)",
-                opacity: !selectedStateId ? 0.5 : 1,
+                borderColor: selectedCity ? "rgba(102, 187, 106, 0.45)" : "rgba(102, 187, 106, 0.25)",
+                opacity: !selectedState ? 0.5 : 1,
               }}
-              disabled={!selectedStateId || loading.cities}
+              disabled={!selectedState}
             >
               <option value="">
-                {!selectedStateId
+                {!selectedState
                   ? "Select state first"
-                  : loading.cities
-                  ? "Loading cities..."
                   : cities.length === 0
                   ? "No cities found"
                   : "Select City"}
               </option>
               {cities.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
             <span style={chevronStyle}>
-              {loading.cities ? <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> : <ChevronDown size={14} />}
+              <ChevronDown size={14} />
             </span>
           </div>
         </div>
@@ -278,37 +185,19 @@ export default function LocationPicker({
             Area / Zone
             {required && <span style={{ color: "#EF5350" }}>*</span>}
           </label>
-          <div style={dropdownWrapper}>
-            <select
-              id="location-area"
-              value={selectedAreaId}
-              onChange={(e) => setSelectedAreaId(e.target.value)}
-              style={{
-                ...selectStyle,
-                borderColor: selectedAreaId ? "rgba(102, 187, 106, 0.45)" : "rgba(102, 187, 106, 0.25)",
-                opacity: !selectedCityId ? 0.5 : 1,
-              }}
-              disabled={!selectedCityId || loading.areas}
-            >
-              <option value="">
-                {!selectedCityId
-                  ? "Select city first"
-                  : loading.areas
-                  ? "Loading areas..."
-                  : areas.length === 0
-                  ? "No areas found"
-                  : "Select Area"}
-              </option>
-              {areas.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}{a.pincode ? ` — ${a.pincode}` : ""}
-                </option>
-              ))}
-            </select>
-            <span style={chevronStyle}>
-              {loading.areas ? <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> : <ChevronDown size={14} />}
-            </span>
-          </div>
+          <input
+            id="location-area"
+            type="text"
+            placeholder="e.g. Banjara Hills, Koramangala..."
+            value={selectedArea}
+            onChange={(e) => setSelectedArea(e.target.value)}
+            style={{
+              ...inputStyle,
+              borderColor: selectedArea.trim() ? "rgba(102, 187, 106, 0.45)" : "rgba(102, 187, 106, 0.25)",
+              opacity: !selectedCity ? 0.5 : 1,
+            }}
+            disabled={!selectedCity}
+          />
         </div>
       </div>
 
@@ -329,10 +218,10 @@ export default function LocationPicker({
           <CheckCircle size={16} style={{ color: "#66BB6A", flexShrink: 0 }} />
           <div>
             <div style={{ fontWeight: 700, color: "#A5D6A7" }}>
-              📍 {selectedArea?.name} · {selectedCity?.name} · {selectedState?.name}
+              📍 {selectedArea} · {selectedCity} · {selectedState}
             </div>
             <div style={{ color: "rgba(232,245,233,0.55)", marginTop: "2px", fontSize: "0.75rem" }}>
-              ✅ Alerts will only reach volunteers in <strong style={{ color: "rgba(232,245,233,0.75)" }}>{selectedArea?.name}</strong> — no other areas
+              ✅ Alerts will only reach volunteers near <strong style={{ color: "rgba(232,245,233,0.75)" }}>{selectedArea}</strong>
             </div>
           </div>
         </div>
@@ -351,12 +240,11 @@ export default function LocationPicker({
           }}
         >
           <MapPin size={13} />
-          Select all 3 levels — alerts are strictly contained to the area you choose
+          Select state, city, and enter your local area/zone to receive alerts.
         </div>
       )}
 
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
         #location-state:focus, #location-city:focus, #location-area:focus {
           border-color: rgba(102, 187, 106, 0.6) !important;
           box-shadow: 0 0 0 3px rgba(102, 187, 106, 0.08);

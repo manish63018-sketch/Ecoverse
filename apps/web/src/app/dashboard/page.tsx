@@ -442,7 +442,7 @@ export default function DashboardPage() {
               <div>
                 <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(232, 245, 233, 0.6)", margin: "0 0 10px 0" }}>My Roles</h3>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {(profile.roles || []).map((role) => (
+                  {(profile.roles || []).map((role: string) => (
                     <span
                       key={role}
                       style={{
