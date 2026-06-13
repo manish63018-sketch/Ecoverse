@@ -65,17 +65,6 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                var host = window.location.hostname;
-                if (
-                  host !== "ecoverseindia.web.app" &&
-                  host !== "localhost" &&
-                  host !== "127.0.0.1" &&
-                  !host.endsWith(".local")
-                ) {
-                  window.location.replace("https://ecoverseindia.web.app" + window.location.pathname + window.location.search + window.location.hash);
-                  return;
-                }
-
                 // Failsafe: detect Supabase password recovery flow and redirect to reset-password page
                 var path = window.location.pathname;
                 var search = window.location.search;

@@ -80,10 +80,11 @@ export async function proxy(request: NextRequest) {
       "http://localhost:3000",
       "http://localhost:5173",
     ];
+    const isAllowed = allowedOrigins.includes(origin) || origin.includes("vercel.app") || origin.includes("localhost:");
 
     if (request.method === "OPTIONS") {
       const corsRes = new NextResponse(null, { status: 204 });
-      if (allowedOrigins.includes(origin)) {
+      if (isAllowed) {
         corsRes.headers.set("Access-Control-Allow-Origin", origin);
       } else {
         corsRes.headers.set("Access-Control-Allow-Origin", origin || "*");
@@ -95,7 +96,7 @@ export async function proxy(request: NextRequest) {
       return corsRes;
     }
 
-    if (allowedOrigins.includes(origin)) {
+    if (isAllowed) {
       response.headers.set("Access-Control-Allow-Origin", origin);
       response.headers.set("Access-Control-Allow-Credentials", "true");
     }
