@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { getApiUrl } from "@/lib/api";
-import { INDIAN_CITIES } from "@/lib/cities";
+import { INDIA_STATES, getCitiesForState } from "@/data/india-locations";
 import {
   Shield,
   Leaf,
@@ -50,7 +50,8 @@ export default function OnboardingPage() {
 
   // Form states
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [city, setCity] = useState("hyderabad");
+  const [state, setState] = useState("");
+  const [city, setCity] = useState("");
   const [pincode, setPincode] = useState("");
   const [displayName, setDisplayName] = useState("");
 
@@ -129,6 +130,14 @@ export default function OnboardingPage() {
         toast.error("Please enter your display name");
         return;
       }
+      if (!state) {
+        toast.error("Please select your state");
+        return;
+      }
+      if (!city) {
+        toast.error("Please select your city");
+        return;
+      }
       if (!pincode.trim() || pincode.length !== 6) {
         toast.error("Please enter a valid 6-digit pincode");
         return;
@@ -164,7 +173,7 @@ export default function OnboardingPage() {
     try {
       setSaving(true);
 
-      const targetStateCode = INDIAN_CITIES.find((c) => c.id === city)?.state || "India";
+      const targetStateCode = state || "India";
       const primaryRole = selectedRoles[0] || "volunteer";
       const isVeganPledged = selectedRoles.includes("vegan") && veganStatus !== "curious";
 
@@ -340,11 +349,14 @@ export default function OnboardingPage() {
 
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(232, 245, 233, 0.85)" }}>
-                  Select City
+                  Select State *
                 </label>
                 <select
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  value={state}
+                  onChange={(e) => {
+                    setState(e.target.value);
+                    setCity("");
+                  }}
                   style={{
                     width: "100%",
                     background: "rgba(10, 16, 11, 0.8)",
@@ -356,9 +368,39 @@ export default function OnboardingPage() {
                   }}
                   className="auth-input"
                 >
-                  {INDIAN_CITIES.map((c) => (
-                    <option key={c.id} value={c.id} style={{ background: "#0a100b", color: "#FFFFFF" }}>
-                      {c.name} ({c.state})
+                  <option value="">Select State</option>
+                  {INDIA_STATES.map((s) => (
+                    <option key={s} value={s} style={{ background: "#0a100b", color: "#FFFFFF" }}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(232, 245, 233, 0.85)" }}>
+                  Select City *
+                </label>
+                <select
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  disabled={!state}
+                  style={{
+                    width: "100%",
+                    background: "rgba(10, 16, 11, 0.8)",
+                    border: "1px solid rgba(102, 187, 106, 0.25)",
+                    borderRadius: "8px",
+                    padding: "12px 14px",
+                    color: "#FFFFFF",
+                    fontSize: "0.95rem",
+                    opacity: !state ? 0.5 : 1
+                  }}
+                  className="auth-input"
+                >
+                  <option value="">Select City</option>
+                  {getCitiesForState(state).map((c) => (
+                    <option key={c} value={c} style={{ background: "#0a100b", color: "#FFFFFF" }}>
+                      {c}
                     </option>
                   ))}
                 </select>
@@ -588,7 +630,7 @@ export default function OnboardingPage() {
               </div>
               <div>
                 <strong style={{ color: "rgba(232,245,233,0.6)" }}>Selected City:</strong>
-                <span style={{ marginLeft: "8px", fontWeight: 600 }}>{INDIAN_CITIES.find(c => c.id === city)?.name} ({pincode})</span>
+                <span style={{ marginLeft: "8px", fontWeight: 600 }}>{city}, {state} ({pincode})</span>
               </div>
               <div>
                 <strong style={{ color: "rgba(232, 245, 233, 0.6)" }}>Selected Roles:</strong>

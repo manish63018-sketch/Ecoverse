@@ -82,11 +82,9 @@ export default function SignupPage() {
       if (data.user) {
         const { error: profileError } = await supabase
           .from('profiles')
-          .upsert({
-            id: data.user.id,
+          .update({
             full_name: form.full_name,
             username: form.username,
-            email: form.email,
             phone: form.phone,
             state_name: form.state_name,
             city_name: form.city_name,
@@ -95,10 +93,12 @@ export default function SignupPage() {
             primary_role: form.roles[0] ?? 'volunteer',
             available_now: form.available_now,
           })
+          .eq('id', data.user.id)
         if (profileError) throw profileError
         router.push('/dashboard')
       }
     } catch (e: any) {
+      console.error('Signup error details:', e)
       const msg = e?.message ?? ''
       if (msg.includes('already registered'))
         setError('This email is already registered. Please login.')
@@ -107,7 +107,7 @@ export default function SignupPage() {
       else if (msg.includes('invalid'))
         setError('Invalid email address.')
       else
-        setError('Signup failed. Please try again.')
+        setError(`Signup failed: ${msg || 'Please try again.'}`)
     } finally {
       setLoading(false)
     }
