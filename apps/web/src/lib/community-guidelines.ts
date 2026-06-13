@@ -54,7 +54,7 @@ export const MOTIVATIONAL_LINES = [
   'You don\'t have to be a vet to save a life. Just show up.',
   'One person who cares is enough to change everything.',
   'The animal cannot speak. You are their voice.',
-  'हम इंसान हैं — दया हमारी पहचान है।',
+  'We are humans — kindness is our identity.',
   'Every rescue is a story of hope. Be part of that story.',
   'A small act of kindness today can give an animal years of life.',
   'You found EcoVerse for a reason. That reason has paws.',
